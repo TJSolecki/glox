@@ -1,5 +1,8 @@
 import argv
 import gleam/io
+import gleam/string
+import input
+import simplifile
 
 pub fn main() -> Nil {
   case argv.load().arguments {
@@ -13,12 +16,35 @@ pub fn main() -> Nil {
 }
 
 fn run_prompt() -> Nil {
-  // todo
-  Nil
+  io.print("> ")
+  case input.input("") {
+    Ok(line) -> {
+      let trimmed_line = string.trim(line)
+      case trimmed_line |> string.is_empty() {
+        True -> run_prompt()
+        False -> {
+          run(trimmed_line)
+          run_prompt()
+        }
+      }
+    }
+    Error(_) -> Nil
+  }
 }
 
-fn run_file(_file_name: String) -> Nil {
+fn run_file(file_name: String) -> Nil {
+  case simplifile.read(file_name) {
+    Ok(content) -> run(content)
+    Error(_) -> {
+      io.print_error("Error: cannot read file '" <> file_name <> "'")
+      halt(1)
+    }
+  }
+}
+
+fn run(code: String) -> Nil {
   // todo
+  io.println("received " <> code)
   Nil
 }
 
