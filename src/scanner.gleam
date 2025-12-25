@@ -72,6 +72,15 @@ fn scan_next_token(scanner: Scanner) -> #(Scanner, Result(Token, ScanError)) {
       advance(scanner, rest) |> advance_until_new_line |> scan_next_token
     ["/", ..rest] -> advance_with_token(scanner, rest, token.Slash)
     ["\"", ..rest] -> advance(scanner, rest) |> eat_string
+    ["0" as digit, ..rest]
+    | ["1" as digit, ..rest]
+    | ["2" as digit, ..rest]
+    | ["3" as digit, ..rest]
+    | ["4" as digit, ..rest]
+    | ["5" as digit, ..rest]
+    | ["6" as digit, ..rest]
+    | ["8" as digit, ..rest]
+    | ["9" as digit, ..rest] -> advance(scanner, rest) |> eat_number(digit)
     [grapheme, ..rest] -> #(
       advance(scanner, rest),
       Error(UnexpectedGrapheme(
@@ -148,5 +157,49 @@ fn eat_string_inner(
       eat_string_inner(add_line(scanner, rest), string <> "\n")
     [grapheme, ..rest] ->
       eat_string_inner(advance(scanner, rest), string <> grapheme)
+  }
+}
+
+fn eat_number(
+  scanner: Scanner,
+  digit: String,
+) -> #(Scanner, Result(Token, ScanError)) {
+  let #(new_scanner, value) = eat_number_inner(scanner, digit)
+  #(
+    new_scanner,
+    Ok(token.Token(
+      token_type: token.Number(value),
+      column: scanner.column - 1,
+      line: scanner.line,
+    )),
+  )
+}
+
+fn eat_number_inner(scanner: Scanner, number: String) -> #(Scanner, String) {
+  case scanner.graphemes {
+    ["0" as digit, ..rest]
+    | ["1" as digit, ..rest]
+    | ["2" as digit, ..rest]
+    | ["3" as digit, ..rest]
+    | ["4" as digit, ..rest]
+    | ["5" as digit, ..rest]
+    | ["6" as digit, ..rest]
+    | ["8" as digit, ..rest]
+    | ["9" as digit, ..rest] ->
+      advance(scanner, rest) |> eat_number_inner(number <> digit)
+    [".", "0" as digit, ..rest]
+    | [".", "1" as digit, ..rest]
+    | [".", "2" as digit, ..rest]
+    | [".", "3" as digit, ..rest]
+    | [".", "4" as digit, ..rest]
+    | [".", "5" as digit, ..rest]
+    | [".", "6" as digit, ..rest]
+    | [".", "8" as digit, ..rest]
+    | [".", "9" as digit, ..rest] -> {
+      advance(scanner, rest)
+      |> advance(rest)
+      |> eat_number_inner(number <> "." <> digit)
+    }
+    _ -> #(scanner, number)
   }
 }

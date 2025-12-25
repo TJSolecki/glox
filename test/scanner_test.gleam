@@ -140,3 +140,41 @@ baz",
   )
   assert actual == expected
 }
+
+pub fn scanner_can_parse_integers_test() {
+  let actual = scanner.scan("123")
+  let expected = #(
+    [
+      token.Token(token_type: token.Number("123"), line: 1, column: 1),
+      token.Token(token_type: token.Eof, line: 1, column: 4),
+    ],
+    [],
+  )
+  assert actual == expected
+}
+
+pub fn scanner_can_parse_floats_test() {
+  let actual = scanner.scan("123.23 0.1")
+  let expected = #(
+    [
+      token.Token(token_type: token.Number("123.23"), line: 1, column: 1),
+      token.Token(token_type: token.Number("0.1"), line: 1, column: 8),
+      token.Token(token_type: token.Eof, line: 1, column: 11),
+    ],
+    [],
+  )
+  assert actual == expected
+}
+
+pub fn scanner_parses_numbers_with_trailing_dot_as_separate_tokens_test() {
+  let actual = scanner.scan("123.")
+  let expected = #(
+    [
+      token.Token(token_type: token.Number("123"), line: 1, column: 1),
+      token.Token(token_type: token.Dot, line: 1, column: 4),
+      token.Token(token_type: token.Eof, line: 1, column: 5),
+    ],
+    [],
+  )
+  assert actual == expected
+}
