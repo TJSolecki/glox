@@ -71,6 +71,7 @@ fn scan_next_token(scanner: Scanner) -> #(Scanner, Result(Token, ScanError)) {
     ["/", "/", ..rest] ->
       advance(scanner, rest) |> advance_until_new_line |> scan_next_token
     ["/", ..rest] -> advance_with_token(scanner, rest, token.Slash)
+    ["\"", ..rest] -> advance(scanner, rest) |> eat_string
     [grapheme, ..rest] -> #(
       advance(scanner, rest),
       Error(UnexpectedGrapheme(
@@ -112,9 +113,40 @@ fn token(scanner: Scanner, token_type: TokenType) -> Result(Token, ScanError) {
 
 fn advance_until_new_line(scanner: Scanner) -> Scanner {
   case scanner.graphemes {
-    [] -> scanner
+    [] -> advance(scanner, [])
     ["\n", ..rest] | ["\r\n", ..rest] ->
       Scanner(graphemes: rest, line: scanner.line + 1, column: 1)
     [_, ..rest] -> advance(scanner, rest) |> advance_until_new_line()
+  }
+}
+
+fn eat_string(scanner: Scanner) -> #(Scanner, Result(Token, ScanError)) {
+  case eat_string_inner(scanner, "") {
+    #(new_scanner, Ok(value)) -> #(
+      new_scanner,
+      Ok(token.Token(
+        token_type: token.String(value),
+        line: scanner.line,
+        column: scanner.column - 1,
+      )),
+    )
+    #(new_scanner, Error(_)) -> #(
+      new_scanner,
+      Error(UnterminatedString(line: scanner.line, column: scanner.column - 1)),
+    )
+  }
+}
+
+fn eat_string_inner(
+  scanner: Scanner,
+  string: String,
+) -> #(Scanner, Result(String, Nil)) {
+  case scanner.graphemes {
+    [] -> #(scanner, Error(Nil))
+    ["\"", ..rest] -> #(advance(scanner, rest), Ok(string))
+    ["\n", ..rest] | ["\r\n", ..rest] ->
+      eat_string_inner(add_line(scanner, rest), string <> "\n")
+    [grapheme, ..rest] ->
+      eat_string_inner(advance(scanner, rest), string <> grapheme)
   }
 }
