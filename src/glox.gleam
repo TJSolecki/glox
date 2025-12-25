@@ -10,7 +10,7 @@ pub fn main() -> Nil {
     [file_name] -> run_file(file_name)
     _ -> {
       io.println("Usage: glox [script]")
-      halt(64)
+      exit(64)
     }
   }
 }
@@ -37,7 +37,7 @@ fn run_file(file_name: String) -> Nil {
     Ok(content) -> run(content)
     Error(_) -> {
       io.print_error("Error: cannot read file '" <> file_name <> "'")
-      halt(1)
+      exit(1)
     }
   }
 }
@@ -49,4 +49,4 @@ fn run(code: String) -> Nil {
 }
 
 @external(erlang, "erlang", "halt")
-fn halt(code: Int) -> Nil
+fn exit(code: Int) -> Nil
