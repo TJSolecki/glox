@@ -55,3 +55,27 @@ pub fn scanner_new_line_test() {
 
   assert actual == expected
 }
+
+pub fn scanner_can_parse_slash_and_comments() {
+  let actual =
+    scanner.scan(
+      "()
++/-
+// this should be ignored
+//
+[
+//",
+    )
+  let expected = #(
+    [
+      token.Token(token_type: token.LeftParen, line: 1, column: 1),
+      token.Token(token_type: token.RightParen, line: 1, column: 2),
+      token.Token(token_type: token.Plus, line: 2, column: 1),
+      token.Token(token_type: token.Slash, line: 2, column: 2),
+      token.Token(token_type: token.Minus, line: 2, column: 3),
+      token.Token(token_type: token.LeftBrace, line: 5, column: 1),
+    ],
+    [],
+  )
+  assert actual == expected
+}

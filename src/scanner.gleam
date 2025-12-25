@@ -68,6 +68,9 @@ fn scan_next_token(scanner: Scanner) -> #(Scanner, Result(Token, ScanError)) {
     ["<", ..rest] -> advance_with_token(scanner, rest, token.Less)
     [">", "=", ..rest] -> advance_with_token(scanner, rest, token.GreaterEqual)
     [">", ..rest] -> advance_with_token(scanner, rest, token.Greater)
+    ["/", "/", ..rest] ->
+      advance(scanner, rest) |> advance_until_new_line |> scan_next_token
+    ["/", ..rest] -> advance_with_token(scanner, rest, token.Slash)
     [grapheme, ..rest] -> #(
       advance(scanner, rest),
       Error(UnexpectedGrapheme(
@@ -105,4 +108,13 @@ fn add_line(scanner: Scanner, graphemes: List(String)) -> Scanner {
 
 fn token(scanner: Scanner, token_type: TokenType) -> Result(Token, ScanError) {
   Ok(token.Token(token_type, line: scanner.line, column: scanner.column))
+}
+
+fn advance_until_new_line(scanner: Scanner) -> Scanner {
+  case scanner.graphemes {
+    [] -> scanner
+    ["\n", ..rest] | ["\r\n", ..rest] ->
+      Scanner(graphemes: rest, line: scanner.line + 1, column: 1)
+    [_, ..rest] -> advance(scanner, rest) |> advance_until_new_line()
+  }
 }
