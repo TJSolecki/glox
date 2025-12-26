@@ -72,19 +72,19 @@ fn scan_next_token(scanner: Scanner) -> #(Scanner, Result(Token, ScanError)) {
     ["/", "/", ..rest] ->
       advance(scanner, rest) |> advance_until_new_line |> scan_next_token
     ["/", ..rest] -> advance_with_token(scanner, rest, token.Slash)
-    ["\"", ..rest] -> advance(scanner, rest) |> eat_string
-    ["0" as digit, ..rest]
-    | ["1" as digit, ..rest]
-    | ["2" as digit, ..rest]
-    | ["3" as digit, ..rest]
-    | ["4" as digit, ..rest]
-    | ["5" as digit, ..rest]
-    | ["6" as digit, ..rest]
-    | ["8" as digit, ..rest]
-    | ["9" as digit, ..rest] -> advance(scanner, rest) |> eat_number(digit)
+    ["\"", ..rest] -> advance(scanner, rest) |> scan_string
+    ["0", ..]
+    | ["1", ..]
+    | ["2", ..]
+    | ["3", ..]
+    | ["4", ..]
+    | ["5", ..]
+    | ["6", ..]
+    | ["8", ..]
+    | ["9", ..] -> scan_number(scanner)
     [grapheme, ..rest] -> {
       case grapheme.is_alphanum(grapheme) {
-        True -> eat_identifier(scanner)
+        True -> scan_identifier(scanner)
         False -> #(
           advance(scanner, rest),
           Error(UnexpectedGrapheme(
@@ -135,8 +135,8 @@ fn advance_until_new_line(scanner: Scanner) -> Scanner {
   }
 }
 
-fn eat_string(scanner: Scanner) -> #(Scanner, Result(Token, ScanError)) {
-  case eat_string_inner(scanner, "") {
+fn scan_string(scanner: Scanner) -> #(Scanner, Result(Token, ScanError)) {
+  case scan_string_loop(scanner, "") {
     #(new_scanner, Ok(value)) -> #(
       new_scanner,
       Ok(token.Token(
@@ -152,7 +152,7 @@ fn eat_string(scanner: Scanner) -> #(Scanner, Result(Token, ScanError)) {
   }
 }
 
-fn eat_string_inner(
+fn scan_string_loop(
   scanner: Scanner,
   string: String,
 ) -> #(Scanner, Result(String, Nil)) {
@@ -160,28 +160,25 @@ fn eat_string_inner(
     [] -> #(scanner, Error(Nil))
     ["\"", ..rest] -> #(advance(scanner, rest), Ok(string))
     ["\n", ..rest] | ["\r\n", ..rest] ->
-      eat_string_inner(add_line(scanner, rest), string <> "\n")
+      scan_string_loop(add_line(scanner, rest), string <> "\n")
     [grapheme, ..rest] ->
-      eat_string_inner(advance(scanner, rest), string <> grapheme)
+      scan_string_loop(advance(scanner, rest), string <> grapheme)
   }
 }
 
-fn eat_number(
-  scanner: Scanner,
-  digit: String,
-) -> #(Scanner, Result(Token, ScanError)) {
-  let #(new_scanner, value) = eat_number_inner(scanner, digit)
+fn scan_number(scanner: Scanner) -> #(Scanner, Result(Token, ScanError)) {
+  let #(new_scanner, value) = scan_number_loop(scanner, "")
   #(
     new_scanner,
     Ok(token.Token(
       token_type: token.Number(value),
-      column: scanner.column - 1,
+      column: scanner.column,
       line: scanner.line,
     )),
   )
 }
 
-fn eat_number_inner(scanner: Scanner, number: String) -> #(Scanner, String) {
+fn scan_number_loop(scanner: Scanner, number: String) -> #(Scanner, String) {
   case scanner.graphemes {
     ["0" as digit, ..rest]
     | ["1" as digit, ..rest]
@@ -192,7 +189,7 @@ fn eat_number_inner(scanner: Scanner, number: String) -> #(Scanner, String) {
     | ["6" as digit, ..rest]
     | ["8" as digit, ..rest]
     | ["9" as digit, ..rest] ->
-      advance(scanner, rest) |> eat_number_inner(number <> digit)
+      advance(scanner, rest) |> scan_number_loop(number <> digit)
     [".", "0" as digit, ..rest]
     | [".", "1" as digit, ..rest]
     | [".", "2" as digit, ..rest]
@@ -204,18 +201,18 @@ fn eat_number_inner(scanner: Scanner, number: String) -> #(Scanner, String) {
     | [".", "9" as digit, ..rest] -> {
       advance(scanner, rest)
       |> advance(rest)
-      |> eat_number_inner(number <> "." <> digit)
+      |> scan_number_loop(number <> "." <> digit)
     }
     _ -> #(scanner, number)
   }
 }
 
-fn eat_identifier(scanner: Scanner) -> #(Scanner, Result(Token, ScanError)) {
-  let #(new_scanner, identifier) = eat_identifier_inner(scanner, "")
+fn scan_identifier(scanner: Scanner) -> #(Scanner, Result(Token, ScanError)) {
+  let #(new_scanner, identifier) = scan_identifier_loop(scanner, "")
   #(new_scanner, map_identifeir_to_keyword(scanner, identifier))
 }
 
-fn eat_identifier_inner(
+fn scan_identifier_loop(
   scanner: Scanner,
   identifier: String,
 ) -> #(Scanner, String) {
@@ -225,7 +222,7 @@ fn eat_identifier_inner(
     [grapheme, ..rest] -> {
       case grapheme.is_alphanum(grapheme) {
         True ->
-          advance(scanner, rest) |> eat_identifier_inner(identifier <> grapheme)
+          advance(scanner, rest) |> scan_identifier_loop(identifier <> grapheme)
         False -> #(scanner, identifier)
       }
     }
