@@ -182,7 +182,7 @@ pub fn scanner_parses_numbers_with_trailing_dot_as_separate_tokens_test() {
 pub fn scanner_can_parse_identifier_test() {
   let actual =
     scanner.scan(
-      "foo for bar
+      "foo for bar_BAZ
 while",
     )
   let expected = #(
@@ -194,7 +194,7 @@ while",
       ),
       token.Token(token_type: token.For, line: 1, column: 5),
       token.Token(
-        token_type: token.Identifier(value: "bar"),
+        token_type: token.Identifier(value: "bar_BAZ"),
         line: 1,
         column: 9,
       ),

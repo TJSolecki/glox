@@ -2,7 +2,7 @@ import gleam/list
 import gleam/result
 import gleam/string
 import token.{type Token, type TokenType}
-import utils/grapheme
+import utils/string_extra
 
 type Scanner {
   Scanner(graphemes: List(String), line: Int, column: Int)
@@ -83,7 +83,7 @@ fn scan_next_token(scanner: Scanner) -> #(Scanner, Result(Token, ScanError)) {
     | ["8", ..]
     | ["9", ..] -> scan_number(scanner)
     [grapheme, ..rest] -> {
-      case grapheme.is_alphanum(grapheme) {
+      case is_valid_identifier(grapheme) {
         True -> scan_identifier(scanner)
         False -> #(
           advance(scanner, rest),
@@ -207,6 +207,10 @@ fn scan_number_loop(scanner: Scanner, number: String) -> #(Scanner, String) {
   }
 }
 
+fn is_valid_identifier(grapheme: String) -> Bool {
+  string_extra.is_alphanum(grapheme) || grapheme == "_"
+}
+
 fn scan_identifier(scanner: Scanner) -> #(Scanner, Result(Token, ScanError)) {
   let #(new_scanner, identifier) = scan_identifier_loop(scanner, "")
   #(new_scanner, map_identifeir_to_keyword(scanner, identifier))
@@ -220,7 +224,7 @@ fn scan_identifier_loop(
     [] -> #(scanner, identifier)
     ["\n", ..rest] | ["\r\n", ..rest] -> #(add_line(scanner, rest), identifier)
     [grapheme, ..rest] -> {
-      case grapheme.is_alphanum(grapheme) {
+      case is_valid_identifier(grapheme) {
         True ->
           advance(scanner, rest) |> scan_identifier_loop(identifier <> grapheme)
         False -> #(scanner, identifier)
