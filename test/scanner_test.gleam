@@ -178,3 +178,30 @@ pub fn scanner_parses_numbers_with_trailing_dot_as_separate_tokens_test() {
   )
   assert actual == expected
 }
+
+pub fn scanner_can_parse_identifier_test() {
+  let actual =
+    scanner.scan(
+      "foo for bar
+while",
+    )
+  let expected = #(
+    [
+      token.Token(
+        token_type: token.Identifier(value: "foo"),
+        line: 1,
+        column: 1,
+      ),
+      token.Token(token_type: token.For, line: 1, column: 5),
+      token.Token(
+        token_type: token.Identifier(value: "bar"),
+        line: 1,
+        column: 9,
+      ),
+      token.Token(token_type: token.While, line: 2, column: 1),
+      token.Token(token_type: token.Eof, line: 2, column: 6),
+    ],
+    [],
+  )
+  assert actual == expected
+}

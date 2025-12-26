@@ -2,6 +2,7 @@ import gleam/list
 import gleam/result
 import gleam/string
 import token.{type Token, type TokenType}
+import utils/grapheme
 
 type Scanner {
   Scanner(graphemes: List(String), line: Int, column: Int)
@@ -81,14 +82,19 @@ fn scan_next_token(scanner: Scanner) -> #(Scanner, Result(Token, ScanError)) {
     | ["6" as digit, ..rest]
     | ["8" as digit, ..rest]
     | ["9" as digit, ..rest] -> advance(scanner, rest) |> eat_number(digit)
-    [grapheme, ..rest] -> #(
-      advance(scanner, rest),
-      Error(UnexpectedGrapheme(
-        grapheme,
-        line: scanner.line,
-        column: scanner.column,
-      )),
-    )
+    [grapheme, ..rest] -> {
+      case grapheme.is_alphanum(grapheme) {
+        True -> eat_identifier(scanner)
+        False -> #(
+          advance(scanner, rest),
+          Error(UnexpectedGrapheme(
+            grapheme,
+            line: scanner.line,
+            column: scanner.column,
+          )),
+        )
+      }
+    }
   }
 }
 
@@ -201,5 +207,52 @@ fn eat_number_inner(scanner: Scanner, number: String) -> #(Scanner, String) {
       |> eat_number_inner(number <> "." <> digit)
     }
     _ -> #(scanner, number)
+  }
+}
+
+fn eat_identifier(scanner: Scanner) -> #(Scanner, Result(Token, ScanError)) {
+  let #(new_scanner, identifier) = eat_identifier_inner(scanner, "")
+  #(new_scanner, map_identifeir_to_keyword(scanner, identifier))
+}
+
+fn eat_identifier_inner(
+  scanner: Scanner,
+  identifier: String,
+) -> #(Scanner, String) {
+  case scanner.graphemes {
+    [] -> #(scanner, identifier)
+    ["\n", ..rest] | ["\r\n", ..rest] -> #(add_line(scanner, rest), identifier)
+    [grapheme, ..rest] -> {
+      case grapheme.is_alphanum(grapheme) {
+        True ->
+          advance(scanner, rest) |> eat_identifier_inner(identifier <> grapheme)
+        False -> #(scanner, identifier)
+      }
+    }
+  }
+}
+
+fn map_identifeir_to_keyword(
+  scanner: Scanner,
+  identifier: String,
+) -> Result(Token, ScanError) {
+  case identifier {
+    "and" -> token(scanner, token.And)
+    "class" -> token(scanner, token.Class)
+    "else" -> token(scanner, token.Else)
+    "false" -> token(scanner, token.False)
+    "fun" -> token(scanner, token.Fun)
+    "for" -> token(scanner, token.For)
+    "if" -> token(scanner, token.If)
+    "nil" -> token(scanner, token.Nil)
+    "or" -> token(scanner, token.Or)
+    "print" -> token(scanner, token.Print)
+    "return" -> token(scanner, token.Return)
+    "super" -> token(scanner, token.Super)
+    "this" -> token(scanner, token.This)
+    "true" -> token(scanner, token.True)
+    "var" -> token(scanner, token.Var)
+    "while" -> token(scanner, token.While)
+    value -> token(scanner, token.Identifier(value))
   }
 }
