@@ -1,8 +1,6 @@
 import gleam/int
-import gleam/io
 import gleam/list
 import gleam/string
-import gleam_community/ansi
 import scanner.{type ScanError}
 
 pub fn error_message(scan_error: ScanError, source: String) {
@@ -15,13 +13,12 @@ pub fn error_message(scan_error: ScanError, source: String) {
   let additional_padding_left = string.length(line) - 1
   let description = error_description(scan_error)
   let pointer =
-    string.pad_start(
-      "^ " <> description,
-      to: additional_padding_left
-        + column_number(scan_error)
-        + string.length(description),
-      with: " ",
+    string.repeat(
+      " ",
+      times: additional_padding_left + column_number(scan_error) - 1,
     )
+    <> "^ "
+    <> description
   let message =
     format_error_message(
       title: error_title(scan_error),
@@ -30,7 +27,6 @@ pub fn error_message(scan_error: ScanError, source: String) {
       code_line: code_line,
       pointer: pointer,
     )
-  io.println(ansi.red(message))
   message
 }
 
@@ -74,5 +70,5 @@ fn format_error_message(
 ┌─ " <> line_str <> ":" <> column_str <> "
 |
 " <> line_str <> " | " <> code <> "
-|    " <> point
+|   " <> point
 }

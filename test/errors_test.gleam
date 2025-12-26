@@ -39,3 +39,15 @@ pub fn format_error_message_points_to_correct_open_string_test() {
 |             ^ This string was never closed."
   assert actual == expected
 }
+
+pub fn format_error_message_should_handle_first_char_unterminated_string_test() {
+  let actual =
+    errors.error_message(scanner.UnterminatedString(line: 1, column: 1), "\"")
+  let expected =
+    "error: Unterminated string
+┌─ 1:1
+|
+1 | \"
+|   ^ This string was never closed."
+  assert actual == expected
+}
