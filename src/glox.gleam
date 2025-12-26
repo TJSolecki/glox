@@ -1,7 +1,12 @@
 import argv
+import errors
+import gleam/bool
 import gleam/io
+import gleam/list
 import gleam/string
+import gleam_community/ansi
 import input
+import scanner
 import simplifile
 
 pub fn main() -> Nil {
@@ -43,8 +48,12 @@ fn run_file(file_name: String) -> Nil {
 }
 
 fn run(code: String) -> Nil {
-  // todo
-  io.println("received " <> code)
+  let #(tokens, scan_errors) = scanner.scan(code)
+  list.each(scan_errors, fn(error) {
+    io.println_error(ansi.red(errors.error_message(error, code)))
+  })
+  use <- bool.guard(!list.is_empty(scan_errors), Nil)
+  echo tokens
   Nil
 }
 
