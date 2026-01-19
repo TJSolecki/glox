@@ -154,12 +154,14 @@ pub fn scanner_can_parse_integers_test() {
 }
 
 pub fn scanner_can_parse_floats_test() {
-  let actual = scanner.scan("123.23 0.1")
+  let actual = scanner.scan("(123.23) 0.1")
   let expected = #(
     [
-      token.Token(token_type: token.Number("123.23"), line: 1, column: 1),
-      token.Token(token_type: token.Number("0.1"), line: 1, column: 8),
-      token.Token(token_type: token.Eof, line: 1, column: 11),
+      token.Token(token_type: token.LeftParen, line: 1, column: 1),
+      token.Token(token_type: token.Number("123.23"), line: 1, column: 2),
+      token.Token(token_type: token.RightParen, line: 1, column: 8),
+      token.Token(token_type: token.Number("0.1"), line: 1, column: 10),
+      token.Token(token_type: token.Eof, line: 1, column: 13),
     ],
     [],
   )

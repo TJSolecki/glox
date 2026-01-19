@@ -187,6 +187,7 @@ fn scan_number_loop(scanner: Scanner, number: String) -> #(Scanner, String) {
     | ["4" as digit, ..rest]
     | ["5" as digit, ..rest]
     | ["6" as digit, ..rest]
+    | ["7" as digit, ..rest]
     | ["8" as digit, ..rest]
     | ["9" as digit, ..rest] ->
       advance(scanner, rest) |> scan_number_loop(number <> digit)
@@ -197,6 +198,7 @@ fn scan_number_loop(scanner: Scanner, number: String) -> #(Scanner, String) {
     | [".", "4" as digit, ..rest]
     | [".", "5" as digit, ..rest]
     | [".", "6" as digit, ..rest]
+    | [".", "7" as digit, ..rest]
     | [".", "8" as digit, ..rest]
     | [".", "9" as digit, ..rest] -> {
       advance(scanner, rest)
