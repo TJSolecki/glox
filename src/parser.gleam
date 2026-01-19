@@ -1,3 +1,4 @@
+import gleam/bool
 import gleam/float
 import gleam/int
 import gleam/list
@@ -181,5 +182,35 @@ pub fn parse_lox_number(value: String) -> Float {
   case int.parse(value) {
     Ok(number) -> int.to_float(number)
     Error(_) -> float.parse(value) |> result.lazy_unwrap(fn() { panic })
+  }
+}
+
+pub fn pretty_print(expression: Expression) -> String {
+  case expression {
+    Grouping(group_expression) ->
+      "(group " <> pretty_print(group_expression) <> ")"
+    Unary(token, unary_expression) ->
+      "("
+      <> token.lexeme(token.token_type)
+      <> " "
+      <> pretty_print(unary_expression)
+      <> ")"
+    Binary(left_expression, operator, right_expression) ->
+      "("
+      <> token.lexeme(operator.token_type)
+      <> " "
+      <> pretty_print(left_expression)
+      <> " "
+      <> pretty_print(right_expression)
+      <> ")"
+    LiteralString(value) -> value
+    LiteralNumber(value) -> {
+      case value == float.floor(value) {
+        True -> float.truncate(value) |> int.to_string
+        False -> float.to_string(value)
+      }
+    }
+    LiteralBool(value) -> bool.to_string(value)
+    LiteralNil -> "nil"
   }
 }

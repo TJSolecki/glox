@@ -1,10 +1,9 @@
 import errors
-import scanner
 
 pub fn format_error_message_points_to_correct_unexpected_grapheme_test() {
   let actual =
     errors.error_message(
-      scanner.UnexpectedGrapheme(grapheme: "@", line: 10, column: 5),
+      errors.UnexpectedGrapheme(grapheme: "@", line: 10, column: 5),
       "
 
 
@@ -28,7 +27,7 @@ let @ foo = \"bar\"",
 pub fn format_error_message_points_to_correct_open_string_test() {
   let actual =
     errors.error_message(
-      scanner.UnterminatedString(line: 1, column: 11),
+      errors.UnterminatedString(line: 1, column: 11),
       "let foo = \"bar baz",
     )
   let expected =
@@ -42,7 +41,7 @@ pub fn format_error_message_points_to_correct_open_string_test() {
 
 pub fn format_error_message_should_handle_first_char_unterminated_string_test() {
   let actual =
-    errors.error_message(scanner.UnterminatedString(line: 1, column: 1), "\"")
+    errors.error_message(errors.UnterminatedString(line: 1, column: 1), "\"")
   let expected =
     "error: Unterminated string
 ┌─ 1:1

@@ -6,6 +6,7 @@ import gleam/list
 import gleam/string
 import gleam_community/ansi
 import input
+import parser
 import scanner
 import simplifile
 
@@ -50,11 +51,22 @@ fn run_file(file_name: String) -> Nil {
 fn run(code: String) -> Nil {
   let #(tokens, scan_errors) = scanner.scan(code)
   list.each(scan_errors, fn(error) {
-    io.println_error(ansi.red(errors.error_message(error, code)))
+    errors.from_scan_error(error)
+    |> errors.error_message(code)
+    |> ansi.red
+    |> io.println_error
   })
   use <- bool.guard(!list.is_empty(scan_errors), Nil)
-  echo tokens
-  Nil
+  case parser.parse(tokens) {
+    Ok(expression) -> parser.pretty_print(expression) |> io.println
+    Error(parser_error) -> {
+      errors.from_parse_error(parser_error)
+      |> errors.error_message(code)
+      |> ansi.red
+      |> io.println_error
+      Nil
+    }
+  }
 }
 
 @external(erlang, "erlang", "halt")
