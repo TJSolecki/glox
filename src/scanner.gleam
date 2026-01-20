@@ -61,6 +61,8 @@ fn scan_next_token(scanner: Scanner) -> #(Scanner, Result(Token, ScanError)) {
     ["+", ..rest] -> advance_with_token(scanner, rest, token.Plus)
     [";", ..rest] -> advance_with_token(scanner, rest, token.Semicolon)
     ["*", ..rest] -> advance_with_token(scanner, rest, token.Star)
+    ["?", ..rest] -> advance_with_token(scanner, rest, token.QuestionMark)
+    [":", ..rest] -> advance_with_token(scanner, rest, token.Colon)
     ["!", "=", ..rest] -> advance_with_token(scanner, rest, token.BangEqual)
     ["!", ..rest] -> advance_with_token(scanner, rest, token.Bang)
     ["=", "=", ..rest] -> advance_with_token(scanner, rest, token.EqualEqual)

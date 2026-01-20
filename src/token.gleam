@@ -11,6 +11,8 @@ pub type TokenType {
   Semicolon
   Slash
   Star
+  QuestionMark
+  Colon
 
   // One or two character tokens.
   Bang
@@ -65,6 +67,8 @@ pub fn lexeme(token_type: TokenType) -> String {
     Plus -> "+"
     Minus -> "-"
     Star -> "*"
+    QuestionMark -> "?"
+    Colon -> ":"
     Slash -> "/"
     Bang -> "!"
     BangEqual -> "!="

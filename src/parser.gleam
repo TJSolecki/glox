@@ -8,6 +8,8 @@ import token.{type Token, type TokenType}
 /// A parser for the following lox grammer
 ///
 /// expression     → equality ;
+/// ternary        → equality
+///                | ( equality '?' ternary ':' ternary ) ;
 /// equality       → comparison ( ( "!=" | "==" ) comparison )* ;
 /// comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 /// term           → factor ( ( "-" | "+" ) factor )* ;
@@ -24,6 +26,11 @@ pub type Expression {
     operator: Token,
     right_expression: Expression,
   )
+  Ternary(
+    clause: Expression,
+    true_expresssion: Expression,
+    false_expression: Expression,
+  )
   LiteralString(value: String)
   LiteralNumber(value: Float)
   LiteralBool(value: Bool)
@@ -33,6 +40,7 @@ pub type Expression {
 pub type ParseError {
   MissingRightParen(line: Int, column: Int)
   ExpectExpression(line: Int, column: Int)
+  MissingColon(line: Int, column: Int)
 }
 
 type Parser {
@@ -45,7 +53,26 @@ pub fn parse(tokens: List(Token)) -> Result(Expression, ParseError) {
 
 /// expression → equality ;
 fn expression(tokens: List(Token)) -> Parser {
-  equality(tokens)
+  ternary(tokens)
+}
+
+/// ternary → equality
+///         | ( equality '?' ternary ':' ternary ) ;
+fn ternary(tokens: List(Token)) -> Parser {
+  use #(rest, equality_expression) <- try_unwrap_parser(equality(tokens))
+  let equality = Parser(rest, Ok(equality_expression))
+  use #(token, rest) <- try_advance(equality)
+  case token.token_type {
+    token.QuestionMark -> {
+      use #(rest, true_clause) <- try_unwrap_parser(
+        ternary(rest)
+        |> consume(token.Colon, MissingColon(token.line, token.column)),
+      )
+      use #(rest, false_clause) <- try_unwrap_parser(ternary(rest))
+      Parser(rest, Ok(Ternary(equality_expression, true_clause, false_clause)))
+    }
+    _ -> equality
+  }
 }
 
 /// equality → comparison ( ( "!=" | "==" ) comparison )* ;
@@ -202,6 +229,14 @@ pub fn pretty_print(expression: Expression) -> String {
       <> pretty_print(left_expression)
       <> " "
       <> pretty_print(right_expression)
+      <> ")"
+    Ternary(clause, true_expression, false_expression) ->
+      "("
+      <> pretty_print(clause)
+      <> " ? "
+      <> pretty_print(true_expression)
+      <> " : "
+      <> pretty_print(false_expression)
       <> ")"
     LiteralString(value) -> value
     LiteralNumber(value) -> {

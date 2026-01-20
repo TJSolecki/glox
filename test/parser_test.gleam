@@ -16,6 +16,35 @@ pub fn parse_missing_right_paren_error_test() {
   assert parse_error == parser.MissingRightParen(1, 1)
 }
 
+pub fn parse_missing_colon_expression_error_test() {
+  let source = "1?2"
+  let tokens = scanner.scan(source).0
+  let assert Error(parse_error) = parser.parse(tokens)
+  assert parse_error == parser.MissingColon(1, 2)
+}
+
+pub fn parse_ternary_test() {
+  let source = "1?2?3:4:5?6:7"
+  let tokens = scanner.scan(source).0
+  let assert Ok(actual_ast) = parser.parse(tokens)
+  let expected_ast =
+    parser.Ternary(
+      parser.LiteralNumber(1.0),
+      parser.Ternary(
+        parser.LiteralNumber(2.0),
+        parser.LiteralNumber(3.0),
+        parser.LiteralNumber(4.0),
+      ),
+      parser.Ternary(
+        parser.LiteralNumber(5.0),
+        parser.LiteralNumber(6.0),
+        parser.LiteralNumber(7.0),
+      ),
+    )
+
+  assert actual_ast == expected_ast
+}
+
 pub fn parse_unary_multiplication_group_test() {
   let source = "-123 * (45.67)"
   let tokens = scanner.scan(source).0

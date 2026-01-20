@@ -9,6 +9,7 @@ pub type GloxError {
   UnexpectedGrapheme(grapheme: String, line: Int, column: Int)
   MissingRightParen(line: Int, column: Int)
   ExpectExpression(line: Int, column: Int)
+  MissingColon(line: Int, column: Int)
 }
 
 pub fn from_scan_error(scan_error: ScanError) -> GloxError {
@@ -23,6 +24,7 @@ pub fn from_parse_error(parse_error: ParseError) -> GloxError {
   case parse_error {
     parser.MissingRightParen(line, column) -> MissingRightParen(line, column)
     parser.ExpectExpression(line, column) -> ExpectExpression(line, column)
+    parser.MissingColon(line, column) -> MissingColon(line, column)
   }
 }
 
@@ -58,6 +60,7 @@ fn error_title(scan_error: GloxError) -> String {
     UnterminatedString(..) -> "Unterminated string"
     ExpectExpression(..) -> "Missing expression"
     MissingRightParen(..) -> "Missing ')'"
+    MissingColon(..) -> "Expected ':' before ';'"
   }
 }
 
@@ -68,6 +71,7 @@ fn error_description(error: GloxError) -> String {
     UnterminatedString(..) -> "This string was never closed."
     ExpectExpression(..) -> "I was expecting an expression here."
     MissingRightParen(..) -> "This parentheses was never closed."
+    MissingColon(..) -> "This ternary has no ':'."
   }
 }
 
@@ -77,6 +81,7 @@ fn line_number(error: GloxError) -> Int {
     UnterminatedString(line: line, ..) -> line
     ExpectExpression(line: line, ..) -> line
     MissingRightParen(line: line, ..) -> line
+    MissingColon(line: line, ..) -> line
   }
 }
 
@@ -86,6 +91,7 @@ fn column_number(error: GloxError) {
     UnterminatedString(column: column, ..) -> column
     ExpectExpression(column: column, ..) -> column
     MissingRightParen(column: column, ..) -> column
+    MissingColon(column: column, ..) -> column
   }
 }
 
