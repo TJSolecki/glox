@@ -82,6 +82,7 @@ fn scan_next_token(scanner: Scanner) -> #(Scanner, Result(Token, ScanError)) {
     | ["4", ..]
     | ["5", ..]
     | ["6", ..]
+    | ["7", ..]
     | ["8", ..]
     | ["9", ..] -> scan_number(scanner)
     [grapheme, ..rest] -> {
