@@ -23,6 +23,28 @@ pub fn parse_missing_colon_expression_error_test() {
   assert parse_error == parser.MissingColon(1, 2)
 }
 
+pub fn parse_comma_test() {
+  let source = "1,2,3,4"
+  let tokens = scanner.scan(source).0
+  let assert Ok(actual_ast) = parser.parse(tokens)
+  let expected_ast =
+    parser.Binary(
+      parser.Binary(
+        parser.Binary(
+          parser.LiteralNumber(1.0),
+          token.Token(token.Comma, 1, 2),
+          parser.LiteralNumber(2.0),
+        ),
+        token.Token(token.Comma, 1, 4),
+        parser.LiteralNumber(3.0),
+      ),
+      token.Token(token.Comma, 1, 6),
+      parser.LiteralNumber(4.0),
+    )
+
+  assert actual_ast == expected_ast
+}
+
 pub fn parse_ternary_test() {
   let source = "1?2?3:4:5?6:7"
   let tokens = scanner.scan(source).0

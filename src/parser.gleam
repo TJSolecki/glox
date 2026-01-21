@@ -7,7 +7,8 @@ import token.{type Token, type TokenType}
 
 /// A parser for the following lox grammer
 ///
-/// expression     → equality ;
+/// expression     → comma ;
+/// comma          → ternary ( ',' ternary )*
 /// ternary        → equality
 ///                | ( equality '?' ternary ':' ternary ) ;
 /// equality       → comparison ( ( "!=" | "==" ) comparison )* ;
@@ -51,9 +52,15 @@ pub fn parse(tokens: List(Token)) -> Result(Expression, ParseError) {
   expression(tokens).expression
 }
 
-/// expression → equality ;
+/// expression → comma ;
 fn expression(tokens: List(Token)) -> Parser {
+  comma(tokens)
+}
+
+/// comma → ternary ( ',' ternary )*
+fn comma(tokens: List(Token)) -> Parser {
   ternary(tokens)
+  |> match_zero_or_more(matching: [token.Comma], using: ternary)
 }
 
 /// ternary → equality
