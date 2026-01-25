@@ -23,6 +23,11 @@ pub fn parse_missing_colon_expression_error_test() {
   assert parse_error == parser.MissingColon(1, 2)
 }
 
+pub fn parse_unexpected_eof_test() {
+  let assert Error(parse_error) = parser.parse([])
+  assert parse_error == parser.UnexpectedEof
+}
+
 pub fn parse_comma_test() {
   let source = "1,2,3,4"
   let tokens = scanner.scan(source).0

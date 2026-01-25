@@ -42,6 +42,7 @@ pub type ParseError {
   MissingRightParen(line: Int, column: Int)
   ExpectExpression(line: Int, column: Int)
   MissingColon(line: Int, column: Int)
+  UnexpectedEof
 }
 
 type Parser {
@@ -150,7 +151,7 @@ fn primary(tokens: List(Token)) -> Parser {
         }
         _ -> Parser(rest, Error(ExpectExpression(token.line, token.column)))
       }
-    _ -> panic
+    [] -> Parser([], Error(UnexpectedEof))
   }
 }
 
@@ -163,7 +164,7 @@ fn consume(
     [token, ..rest] if token.token_type == token_type ->
       Parser(rest, parser.expression)
     [_, ..rest] -> Parser(rest, Error(parse_error))
-    _ -> Parser(parser.tokens, Error(parse_error))
+    [] -> Parser([], Error(parse_error))
   }
 }
 

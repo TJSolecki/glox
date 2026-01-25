@@ -1,4 +1,16 @@
 import errors
+import parser
+
+pub fn from_unexpected_eof_test() {
+  let actual_glox_error =
+    errors.from_parse_error(
+      parser.UnexpectedEof,
+      "
+
+",
+    )
+  assert actual_glox_error == errors.UnexpectedEof(3, 1)
+}
 
 pub fn format_error_message_points_to_correct_unexpected_grapheme_test() {
   let actual =
@@ -20,7 +32,7 @@ let @ foo = \"bar\"",
 ┌─ 10:5
 |
 10 | let @ foo = \"bar\"
-|        ^ I wasn't expecting a \"@\" here."
+|        ^ We weren't expecting a \"@\" here."
   assert actual == expected
 }
 

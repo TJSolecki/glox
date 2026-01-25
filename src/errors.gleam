@@ -1,5 +1,6 @@
 import gleam/int
 import gleam/list
+import gleam/result
 import gleam/string
 import parser.{type ParseError}
 import scanner.{type ScanError}
@@ -10,6 +11,7 @@ pub type GloxError {
   MissingRightParen(line: Int, column: Int)
   ExpectExpression(line: Int, column: Int)
   MissingColon(line: Int, column: Int)
+  UnexpectedEof(line: Int, column: Int)
 }
 
 pub fn from_scan_error(scan_error: ScanError) -> GloxError {
@@ -20,11 +22,21 @@ pub fn from_scan_error(scan_error: ScanError) -> GloxError {
   }
 }
 
-pub fn from_parse_error(parse_error: ParseError) -> GloxError {
+pub fn from_parse_error(parse_error: ParseError, source: String) -> GloxError {
   case parse_error {
     parser.MissingRightParen(line, column) -> MissingRightParen(line, column)
     parser.ExpectExpression(line, column) -> ExpectExpression(line, column)
     parser.MissingColon(line, column) -> MissingColon(line, column)
+    parser.UnexpectedEof -> {
+      let lines = string.split(source, on: "\n")
+      let final_line = list.last(lines)
+      UnexpectedEof(
+        line: int.max(list.length(lines), 1),
+        column: result.map(final_line, string.length)
+          |> result.unwrap(1)
+          |> int.max(1),
+      )
+    }
   }
 }
 
@@ -61,17 +73,19 @@ fn error_title(scan_error: GloxError) -> String {
     ExpectExpression(..) -> "Missing expression"
     MissingRightParen(..) -> "Missing ')'"
     MissingColon(..) -> "Expected ':' before ';'"
+    UnexpectedEof(..) -> "Unexpected end of file"
   }
 }
 
 fn error_description(error: GloxError) -> String {
   case error {
     UnexpectedGrapheme(grapheme, ..) ->
-      "I wasn't expecting a \"" <> grapheme <> "\" here."
+      "We weren't expecting a \"" <> grapheme <> "\" here."
     UnterminatedString(..) -> "This string was never closed."
-    ExpectExpression(..) -> "I was expecting an expression here."
+    ExpectExpression(..) -> "We were expecting an expression here."
     MissingRightParen(..) -> "This parentheses was never closed."
     MissingColon(..) -> "This ternary has no ':'."
+    UnexpectedEof(..) -> "We didn't expect to end here."
   }
 }
 
@@ -82,6 +96,7 @@ fn line_number(error: GloxError) -> Int {
     ExpectExpression(line: line, ..) -> line
     MissingRightParen(line: line, ..) -> line
     MissingColon(line: line, ..) -> line
+    UnexpectedEof(line: line, ..) -> line
   }
 }
 
@@ -92,6 +107,7 @@ fn column_number(error: GloxError) {
     ExpectExpression(column: column, ..) -> column
     MissingRightParen(column: column, ..) -> column
     MissingColon(column: column, ..) -> column
+    UnexpectedEof(column: column, ..) -> column
   }
 }
 

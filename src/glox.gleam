@@ -60,7 +60,7 @@ fn run(code: String) -> Nil {
   case parser.parse(tokens) {
     Ok(expression) -> parser.pretty_print(expression) |> io.println
     Error(parser_error) -> {
-      errors.from_parse_error(parser_error)
+      errors.from_parse_error(parser_error, code)
       |> errors.error_message(code)
       |> ansi.red
       |> io.println_error
