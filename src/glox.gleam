@@ -3,9 +3,11 @@ import errors
 import gleam/bool
 import gleam/io
 import gleam/list
+import gleam/result
 import gleam/string
 import gleam_community/ansi
 import input
+import interperater
 import parser
 import scanner
 import simplifile
@@ -58,7 +60,19 @@ fn run(code: String) -> Nil {
   })
   use <- bool.guard(!list.is_empty(scan_errors), Nil)
   case parser.parse(tokens) {
-    Ok(expression) -> parser.pretty_print(expression) |> io.println
+    Ok(expression) ->
+      interperater.evaluate(expression)
+      |> result.map(fn(literal) {
+        interperater.literal_to_string(literal)
+        |> io.println
+      })
+      |> result.map_error(fn(runtime_error) {
+        errors.from_runtime_error(runtime_error)
+        |> errors.error_message(code)
+        |> ansi.red
+        |> io.println_error
+      })
+      |> result.unwrap(Nil)
     Error(parser_error) -> {
       errors.from_parse_error(parser_error, code)
       |> errors.error_message(code)
