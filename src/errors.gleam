@@ -2,8 +2,10 @@ import gleam/int
 import gleam/list
 import gleam/result
 import gleam/string
+import interperater.{type Literal, type RuntimeError}
 import parser.{type ParseError}
 import scanner.{type ScanError}
+import token.{type Token}
 
 pub type GloxError {
   UnterminatedString(line: Int, column: Int)
@@ -12,6 +14,9 @@ pub type GloxError {
   ExpectExpression(line: Int, column: Int)
   MissingColon(line: Int, column: Int)
   UnexpectedEof(line: Int, column: Int)
+  UnsupportedUnaryOperator(token: Token)
+  UnsupportedNegation(minus: Token, literal: Literal)
+  UnsupportedOperation(left: Literal, operator: Token, right: Literal)
 }
 
 pub fn from_scan_error(scan_error: ScanError) -> GloxError {
@@ -37,6 +42,17 @@ pub fn from_parse_error(parse_error: ParseError, source: String) -> GloxError {
           |> int.max(1),
       )
     }
+  }
+}
+
+pub fn from_runtime_error(runtime_error: RuntimeError) -> GloxError {
+  case runtime_error {
+    interperater.UnsupportedUnaryOperator(token) ->
+      UnsupportedUnaryOperator(token)
+    interperater.UnsupportedNegation(minus, literal) ->
+      UnsupportedNegation(minus, literal)
+    interperater.UnsupportedOperation(left, operator, right) ->
+      UnsupportedOperation(left, operator, right)
   }
 }
 
@@ -74,6 +90,27 @@ fn error_title(scan_error: GloxError) -> String {
     MissingRightParen(..) -> "Missing ')'"
     MissingColon(..) -> "Expected ':' before ';'"
     UnexpectedEof(..) -> "Unexpected end of file"
+    UnsupportedUnaryOperator(token) ->
+      "Missing left operand for `" <> token.lexeme(token.token_type) <> "`"
+    UnsupportedOperation(left, operator, right) ->
+      "Unsupported operation `"
+      <> literal_type_name(left)
+      <> "` "
+      <> token.lexeme(operator.token_type)
+      <> " `"
+      <> literal_type_name(right)
+      <> "`"
+    UnsupportedNegation(_, literal) ->
+      "Illegal `" <> literal_type_name(literal) <> "` negation"
+  }
+}
+
+fn literal_type_name(literal: Literal) -> String {
+  case literal {
+    interperater.LiteralString(..) -> "string"
+    interperater.LiteralNumber(..) -> "number"
+    interperater.LiteralBool(..) -> "bool"
+    interperater.LiteralNil -> "nil"
   }
 }
 
@@ -86,6 +123,17 @@ fn error_description(error: GloxError) -> String {
     MissingRightParen(..) -> "This parentheses was never closed."
     MissingColon(..) -> "This ternary has no ':'."
     UnexpectedEof(..) -> "We didn't expect to end here."
+    UnsupportedUnaryOperator(..) -> "Here."
+    UnsupportedOperation(left, operator, right) ->
+      "Lox does not support the `"
+      <> token.lexeme(operator.token_type)
+      <> "` operation between `"
+      <> literal_type_name(left)
+      <> "`s and `"
+      <> literal_type_name(right)
+      <> "`s."
+    UnsupportedNegation(_, literal) ->
+      "We cannot negate `" <> literal_type_name(literal) <> "`s within Lox."
   }
 }
 
@@ -97,6 +145,9 @@ fn line_number(error: GloxError) -> Int {
     MissingRightParen(line: line, ..) -> line
     MissingColon(line: line, ..) -> line
     UnexpectedEof(line: line, ..) -> line
+    UnsupportedUnaryOperator(token) -> token.line
+    UnsupportedOperation(_, operator, ..) -> operator.line
+    UnsupportedNegation(minus, ..) -> minus.line
   }
 }
 
@@ -108,6 +159,9 @@ fn column_number(error: GloxError) {
     MissingRightParen(column: column, ..) -> column
     MissingColon(column: column, ..) -> column
     UnexpectedEof(column: column, ..) -> column
+    UnsupportedUnaryOperator(token) -> token.column
+    UnsupportedOperation(_, operator, ..) -> operator.column
+    UnsupportedNegation(minus, ..) -> minus.column
   }
 }
 
