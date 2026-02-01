@@ -45,6 +45,11 @@ pub fn evaluate_expression_test() {
     #("1,2", Ok(interperater.LiteralNumber(2.0)), "comma returns right operand"),
     #("1+2", Ok(interperater.LiteralNumber(3.0)), "should add numbers on +"),
     #(
+      "\"foo\"+\"bar\"",
+      Ok(interperater.LiteralString("foobar")),
+      "should add strings on +",
+    ),
+    #(
       "1-2",
       Ok(interperater.LiteralNumber(-1.0)),
       "should subtract numbers on -",
@@ -58,12 +63,82 @@ pub fn evaluate_expression_test() {
     #(
       "4==4",
       Ok(interperater.LiteralBool(True)),
-      "should compare identical numbers",
+      "equals equals should return true when comparing identical numbers",
+    ),
+    #(
+      "4==3",
+      Ok(interperater.LiteralBool(False)),
+      "equals equals should return false when comparing different numbers",
     ),
     #(
       "4!=4",
       Ok(interperater.LiteralBool(False)),
-      "identical numbers should return false for !=",
+      "not equals should return false when comparing identical numbers",
+    ),
+    #(
+      "4!=3",
+      Ok(interperater.LiteralBool(True)),
+      "not equals should return true when comparing different numbers",
+    ),
+    #(
+      "1<2",
+      Ok(interperater.LiteralBool(True)),
+      "less than should return true when the left hand number is less than the right hand number",
+    ),
+    #(
+      "2<2",
+      Ok(interperater.LiteralBool(False)),
+      "less than should return false when the left hand number is equal to the right hand number",
+    ),
+    #(
+      "3<2",
+      Ok(interperater.LiteralBool(False)),
+      "less than should return false when the left hand number is greater than the right hand number",
+    ),
+    #(
+      "1>2",
+      Ok(interperater.LiteralBool(False)),
+      "greater than should return false when the left hand number is less than the right hand number",
+    ),
+    #(
+      "2>2",
+      Ok(interperater.LiteralBool(False)),
+      "greater than should return false when the left hand number is equal to the right hand number",
+    ),
+    #(
+      "3>2",
+      Ok(interperater.LiteralBool(True)),
+      "greater than should return false when the left hand number is greater than the right hand number",
+    ),
+    #(
+      "1<=2",
+      Ok(interperater.LiteralBool(True)),
+      "less than or equals hould return true when the left hand number is less than the right hand number",
+    ),
+    #(
+      "2<=2",
+      Ok(interperater.LiteralBool(True)),
+      "less than or equals should return true when the left hand number is equal to the right hand number",
+    ),
+    #(
+      "3<=2",
+      Ok(interperater.LiteralBool(False)),
+      "less than or equals should return false when the left hand number is greater than the right hand number",
+    ),
+    #(
+      "1>=2",
+      Ok(interperater.LiteralBool(False)),
+      "greater than or equals should return false when the left hand number is less than the right hand number",
+    ),
+    #(
+      "2>=2",
+      Ok(interperater.LiteralBool(True)),
+      "greater than or equals should return true when the left hand number is equal to the right hand number",
+    ),
+    #(
+      "3>=2",
+      Ok(interperater.LiteralBool(True)),
+      "greater than or equals should return false when the left hand number is greater than the right hand number",
     ),
   ]
   use #(source, expected, message) <- data_provider(test_cases)
