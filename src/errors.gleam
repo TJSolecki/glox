@@ -4,7 +4,7 @@ import gleam/result
 import gleam/string
 import interperater.{type Literal, type RuntimeError}
 import invalid_token.{type InvalidToken}
-import parser.{type ParseError}
+import parser.{type InvalidUnaryToken, type ParseError}
 import scanner.{type ScanError}
 import span.{type Span}
 import token.{type Token}
@@ -16,7 +16,7 @@ pub type GloxError {
   ExpectExpression(line: Int, column: Int)
   MissingColon(line: Int, column: Int)
   UnexpectedEof(line: Int, column: Int)
-  UnsupportedUnaryOperator(token: Token)
+  UnsupportedUnaryOperator(invalid_unary_token: InvalidUnaryToken, span: Span)
   UnsupportedNegation(minus: Token, literal: Literal)
   UnsupportedOperation(left: Literal, operator: Token, right: Literal)
   InvalidSyntax(invalid_token: InvalidToken, span: Span)
@@ -37,6 +37,8 @@ pub fn from_parse_error(parse_error: ParseError, source: String) -> GloxError {
     parser.MissingRightParen(line, column) -> MissingRightParen(line, column)
     parser.ExpectExpression(line, column) -> ExpectExpression(line, column)
     parser.MissingColon(line, column) -> MissingColon(line, column)
+    parser.UnsupportedUnaryOperator(invalid_unary_token, span) ->
+      UnsupportedUnaryOperator(invalid_unary_token, span)
     parser.UnexpectedEof -> {
       let lines = string.split(source, on: "\n")
       let final_line = list.last(lines)
@@ -52,8 +54,6 @@ pub fn from_parse_error(parse_error: ParseError, source: String) -> GloxError {
 
 pub fn from_runtime_error(runtime_error: RuntimeError) -> GloxError {
   case runtime_error {
-    interperater.UnsupportedUnaryOperator(token) ->
-      UnsupportedUnaryOperator(token)
     interperater.UnsupportedNegation(minus, literal) ->
       UnsupportedNegation(minus, literal)
     interperater.UnsupportedOperation(left, operator, right) ->
@@ -93,8 +93,7 @@ fn error_title(scan_error: GloxError) -> String {
     MissingRightParen(..) -> "Missing ')'"
     MissingColon(..) -> "Expected ':' before ';'"
     UnexpectedEof(..) -> "Unexpected end of file"
-    UnsupportedUnaryOperator(token) ->
-      "Missing left operand for `" <> token.lexeme(token.token_type) <> "`"
+    UnsupportedUnaryOperator(..) -> "Missing left operand for `+`"
     UnsupportedOperation(left, operator, right) ->
       "Unsupported operation `"
       <> literal_type_name(left)
@@ -133,7 +132,8 @@ fn error_description(error: GloxError) -> String {
     MissingRightParen(..) -> "This parentheses was never closed."
     MissingColon(..) -> "This ternary has no ':'."
     UnexpectedEof(..) -> "We didn't expect to end here."
-    UnsupportedUnaryOperator(..) -> "Here."
+    UnsupportedUnaryOperator(..) ->
+      "Lox does not support the unary `+` operation."
     UnsupportedOperation(left, operator, right) ->
       "Lox does not support the `"
       <> token.lexeme(operator.token_type)
@@ -164,7 +164,7 @@ fn get_span(error: GloxError) -> Span {
     MissingRightParen(line: line, column: column) -> span.point(line, column)
     MissingColon(line: line, column: column) -> span.point(line, column)
     UnexpectedEof(line: line, column: column) -> span.point(line, column)
-    UnsupportedUnaryOperator(token) -> span.from_token(token)
+    UnsupportedUnaryOperator(span: span, ..) -> span
     UnsupportedOperation(_, operator, ..) -> span.from_token(operator)
     UnsupportedNegation(minus, ..) -> span.from_token(minus)
     InvalidSyntax(span: span, ..) -> span

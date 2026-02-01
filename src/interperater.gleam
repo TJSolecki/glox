@@ -12,7 +12,6 @@ pub type Literal {
 }
 
 pub type RuntimeError {
-  UnsupportedUnaryOperator(token: Token)
   UnsupportedNegation(minus: Token, literal: Literal)
   UnsupportedOperation(left: Literal, operator: Token, right: Literal)
 }
@@ -64,7 +63,8 @@ fn evaluate_unary(operator: Token, right: Expression) -> EvalResult {
       )
       Ok(LiteralNumber(value: -1.0 *. number))
     }
-    _ -> Error(UnsupportedUnaryOperator(operator))
+    _ ->
+      panic as "Unreachable code. Unary only allows Bang and Plus in the grammer"
   }
 }
 

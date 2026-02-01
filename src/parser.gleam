@@ -3,6 +3,7 @@ import gleam/float
 import gleam/int
 import gleam/list
 import gleam/result
+import span.{type Span}
 import token.{type Token, type TokenType}
 
 /// A parser for the following lox grammer
@@ -42,7 +43,12 @@ pub type ParseError {
   MissingRightParen(line: Int, column: Int)
   ExpectExpression(line: Int, column: Int)
   MissingColon(line: Int, column: Int)
+  UnsupportedUnaryOperator(invalid_unary_token: InvalidUnaryToken, span: Span)
   UnexpectedEof
+}
+
+pub type InvalidUnaryToken {
+  Plus
 }
 
 type Parser {
@@ -117,11 +123,23 @@ fn factor(tokens: List(Token)) -> Parser {
 ///       | primary
 fn unary(tokens: List(Token)) -> Parser {
   case tokens {
-    [current, ..rest]
-      if current.token_type == token.Bang || current.token_type == token.Minus
+    [unary_operator, ..rest]
+      if unary_operator.token_type == token.Bang
+      || unary_operator.token_type == token.Minus
     -> {
       use #(rest, expression) <- try_unwrap_parser(unary(rest))
-      Parser(rest, Ok(Unary(current, expression)))
+      Parser(rest, Ok(Unary(unary_operator, expression)))
+    }
+    [invalid_unary_operator, ..rest]
+      if invalid_unary_operator.token_type == token.Plus
+    -> {
+      Parser(
+        rest,
+        Error(UnsupportedUnaryOperator(
+          Plus,
+          span.point(invalid_unary_operator.line, invalid_unary_operator.column),
+        )),
+      )
     }
     _ -> primary(tokens)
   }

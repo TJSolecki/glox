@@ -1,5 +1,6 @@
 import parser
 import scanner
+import span
 import token
 
 pub fn parse_unexpected_expression_error_test() {
@@ -7,6 +8,14 @@ pub fn parse_unexpected_expression_error_test() {
   let tokens = scanner.scan(source).0
   let assert Error(parse_error) = parser.parse(tokens)
   assert parse_error == parser.ExpectExpression(1, 3)
+}
+
+pub fn parse_unsupported_unary_operator_error_test() {
+  let source = "+1"
+  let tokens = scanner.scan(source).0
+  let assert Error(parse_error) = parser.parse(tokens)
+  assert parse_error
+    == parser.UnsupportedUnaryOperator(parser.Plus, span.point(1, 1))
 }
 
 pub fn parse_missing_right_paren_error_test() {
