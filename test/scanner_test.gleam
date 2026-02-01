@@ -1,4 +1,7 @@
+import invalid_token
 import scanner
+import span.{Span}
+import test_utils.{data_provider}
 import token
 
 pub fn scanner_single_char_test() {
@@ -206,4 +209,67 @@ while",
     [],
   )
   assert actual == expected
+}
+
+pub fn scanner_reports_invalid_syntax_test() {
+  let test_cases = [
+    #(
+      "1&&1",
+      #(
+        [
+          token.Token(token.Number("1"), 1, 1),
+          token.Token(token.Number("1"), 1, 4),
+          token.Token(token.Eof, 1, 5),
+        ],
+        [
+          scanner.InvalidSyntax(invalid_token.AndAnd, Span(1, 2, 1, 3)),
+        ],
+      ),
+      "should identify wrong and",
+    ),
+    #(
+      "1||1",
+      #(
+        [
+          token.Token(token.Number("1"), 1, 1),
+          token.Token(token.Number("1"), 1, 4),
+          token.Token(token.Eof, 1, 5),
+        ],
+        [
+          scanner.InvalidSyntax(invalid_token.OrOr, Span(1, 2, 1, 3)),
+        ],
+      ),
+      "should identify wrong or",
+    ),
+    #(
+      "1|1",
+      #(
+        [
+          token.Token(token.Number("1"), 1, 1),
+          token.Token(token.Number("1"), 1, 3),
+          token.Token(token.Eof, 1, 4),
+        ],
+        [
+          scanner.InvalidSyntax(invalid_token.BitwiseOr, Span(1, 2, 1, 2)),
+        ],
+      ),
+      "should identify bitwise or",
+    ),
+    #(
+      "1&1",
+      #(
+        [
+          token.Token(token.Number("1"), 1, 1),
+          token.Token(token.Number("1"), 1, 3),
+          token.Token(token.Eof, 1, 4),
+        ],
+        [
+          scanner.InvalidSyntax(invalid_token.BitwiseAnd, Span(1, 2, 1, 2)),
+        ],
+      ),
+      "should identify bitwise and",
+    ),
+  ]
+  use #(source, expected, message) <- data_provider(test_cases)
+  assert scanner.scan(source) == expected as message
 }

@@ -32,7 +32,9 @@ let @ foo = \"bar\"",
 ┌─ 10:5
 |
 10 | let @ foo = \"bar\"
-|        ^ We weren't expecting a \"@\" here."
+|        ^
+
+We weren't expecting a \"@\" here."
   assert actual == expected
 }
 
@@ -47,7 +49,9 @@ pub fn format_error_message_points_to_correct_open_string_test() {
 ┌─ 1:11
 |
 1 | let foo = \"bar baz
-|             ^ This string was never closed."
+|             ^
+
+This string was never closed."
   assert actual == expected
 }
 
@@ -59,6 +63,8 @@ pub fn format_error_message_should_handle_first_char_unterminated_string_test() 
 ┌─ 1:1
 |
 1 | \"
-|   ^ This string was never closed."
+|   ^
+
+This string was never closed."
   assert actual == expected
 }

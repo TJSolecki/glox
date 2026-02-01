@@ -3,8 +3,10 @@ import gleam/list
 import gleam/result
 import gleam/string
 import interperater.{type Literal, type RuntimeError}
+import invalid_token.{type InvalidToken}
 import parser.{type ParseError}
 import scanner.{type ScanError}
+import span.{type Span}
 import token.{type Token}
 
 pub type GloxError {
@@ -17,6 +19,7 @@ pub type GloxError {
   UnsupportedUnaryOperator(token: Token)
   UnsupportedNegation(minus: Token, literal: Literal)
   UnsupportedOperation(left: Literal, operator: Token, right: Literal)
+  InvalidSyntax(invalid_token: InvalidToken, span: Span)
 }
 
 pub fn from_scan_error(scan_error: ScanError) -> GloxError {
@@ -24,6 +27,8 @@ pub fn from_scan_error(scan_error: ScanError) -> GloxError {
     scanner.UnterminatedString(line, column) -> UnterminatedString(line, column)
     scanner.UnexpectedGrapheme(grapheme, line, column) ->
       UnexpectedGrapheme(grapheme, line, column)
+    scanner.InvalidSyntax(invalid_token, span) ->
+      InvalidSyntax(invalid_token, span)
   }
 }
 
@@ -58,19 +63,16 @@ pub fn from_runtime_error(runtime_error: RuntimeError) -> GloxError {
 
 pub fn error_message(error: GloxError, source: String) {
   let lines = string.split(source, on: "\n")
-  let assert Ok(code_line) = list.take(lines, line_number(error)) |> list.last
+  let span = get_span(error)
+  let assert Ok(code_line) = list.take(lines, span.start_line) |> list.last
 
-  let line = line_number(error) |> int.to_string
-  let column = column_number(error) |> int.to_string
+  let line = span.start_line |> int.to_string
+  let column = span.start_column |> int.to_string
   let additional_padding_left = string.length(line) - 1
   let description = error_description(error)
   let pointer =
-    string.repeat(
-      " ",
-      times: additional_padding_left + column_number(error) - 1,
-    )
-    <> "^ "
-    <> description
+    string.repeat(" ", times: additional_padding_left + span.start_column - 1)
+    <> string.repeat("^", times: span.end_column - span.start_column + 1)
   let message =
     format_error_message(
       title: error_title(error),
@@ -78,6 +80,7 @@ pub fn error_message(error: GloxError, source: String) {
       column: column,
       code_line: code_line,
       pointer: pointer,
+      description: description,
     )
   message
 }
@@ -102,6 +105,13 @@ fn error_title(scan_error: GloxError) -> String {
       <> "`"
     UnsupportedNegation(_, literal) ->
       "Illegal `" <> literal_type_name(literal) <> "` negation"
+    InvalidSyntax(invalid_token: invalid_token.AndAnd, ..) ->
+      "Wrong logical 'and'"
+    InvalidSyntax(invalid_token: invalid_token.OrOr, ..) -> "Wrong logical 'or'"
+    InvalidSyntax(invalid_token: invalid_token.BitwiseOr, ..) ->
+      "Unsupported operation '|'"
+    InvalidSyntax(invalid_token: invalid_token.BitwiseAnd, ..) ->
+      "Unsupported operation '&'"
   }
 }
 
@@ -134,34 +144,30 @@ fn error_description(error: GloxError) -> String {
       <> "`s."
     UnsupportedNegation(_, literal) ->
       "We cannot negate `" <> literal_type_name(literal) <> "`s within Lox."
+    InvalidSyntax(invalid_token: invalid_token.AndAnd, ..) ->
+      "Lox uses the keyword 'and', not '&&'."
+    InvalidSyntax(invalid_token: invalid_token.OrOr, ..) ->
+      "Lox uses the keyword 'or', not '||'"
+    InvalidSyntax(invalid_token: invalid_token.BitwiseOr, ..) ->
+      "Lox does not support the bitwise or operation."
+    InvalidSyntax(invalid_token: invalid_token.BitwiseAnd, ..) ->
+      "Lox does not support the bitwise and operation."
   }
 }
 
-fn line_number(error: GloxError) -> Int {
+fn get_span(error: GloxError) -> Span {
   case error {
-    UnexpectedGrapheme(line: line, ..) -> line
-    UnterminatedString(line: line, ..) -> line
-    ExpectExpression(line: line, ..) -> line
-    MissingRightParen(line: line, ..) -> line
-    MissingColon(line: line, ..) -> line
-    UnexpectedEof(line: line, ..) -> line
-    UnsupportedUnaryOperator(token) -> token.line
-    UnsupportedOperation(_, operator, ..) -> operator.line
-    UnsupportedNegation(minus, ..) -> minus.line
-  }
-}
-
-fn column_number(error: GloxError) {
-  case error {
-    UnexpectedGrapheme(column: column, ..) -> column
-    UnterminatedString(column: column, ..) -> column
-    ExpectExpression(column: column, ..) -> column
-    MissingRightParen(column: column, ..) -> column
-    MissingColon(column: column, ..) -> column
-    UnexpectedEof(column: column, ..) -> column
-    UnsupportedUnaryOperator(token) -> token.column
-    UnsupportedOperation(_, operator, ..) -> operator.column
-    UnsupportedNegation(minus, ..) -> minus.column
+    UnexpectedGrapheme(line: line, column: column, ..) ->
+      span.point(line, column)
+    UnterminatedString(line: line, column: column) -> span.point(line, column)
+    ExpectExpression(line: line, column: column) -> span.point(line, column)
+    MissingRightParen(line: line, column: column) -> span.point(line, column)
+    MissingColon(line: line, column: column) -> span.point(line, column)
+    UnexpectedEof(line: line, column: column) -> span.point(line, column)
+    UnsupportedUnaryOperator(token) -> span.from_token(token)
+    UnsupportedOperation(_, operator, ..) -> span.from_token(operator)
+    UnsupportedNegation(minus, ..) -> span.from_token(minus)
+    InvalidSyntax(span: span, ..) -> span
   }
 }
 
@@ -171,10 +177,13 @@ fn format_error_message(
   column column_str: String,
   code_line code: String,
   pointer point: String,
+  description desc: String,
 ) -> String {
   "error: " <> error_title <> "
 ┌─ " <> line_str <> ":" <> column_str <> "
 |
 " <> line_str <> " | " <> code <> "
-|   " <> point
+|   " <> point <> "
+
+" <> desc
 }

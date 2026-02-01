@@ -1,7 +1,7 @@
-import gleam/list
 import interperater
 import parser
 import scanner
+import test_utils.{data_provider}
 
 pub fn evaluate_bool_test() {
   assert interperater.evaluate(parser.LiteralBool(True))
@@ -70,8 +70,4 @@ pub fn evaluate_expression_test() {
   let tokens = scanner.scan(source).0
   let assert Ok(expression) = parser.parse(tokens)
   assert interperater.evaluate(expression) == expected as message
-}
-
-fn data_provider(test_cases: List(_), run_test: fn(_) -> Nil) -> Nil {
-  list.each(test_cases, fn(test_case) { run_test(test_case) })
 }

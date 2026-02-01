@@ -1,6 +1,8 @@
 import gleam/list
 import gleam/result
 import gleam/string
+import invalid_token.{type InvalidToken}
+import span.{type Span}
 import token.{type Token, type TokenType}
 import utils/string_extra
 
@@ -11,6 +13,7 @@ type Scanner {
 pub type ScanError {
   UnterminatedString(line: Int, column: Int)
   UnexpectedGrapheme(grapheme: String, line: Int, column: Int)
+  InvalidSyntax(invalid_token: InvalidToken, span: Span)
 }
 
 pub fn scan(source: String) -> #(List(Token), List(ScanError)) {
@@ -71,6 +74,14 @@ fn scan_next_token(scanner: Scanner) -> #(Scanner, Result(Token, ScanError)) {
     ["<", ..rest] -> advance_with_token(scanner, rest, token.Less)
     [">", "=", ..rest] -> advance_with_token(scanner, rest, token.GreaterEqual)
     [">", ..rest] -> advance_with_token(scanner, rest, token.Greater)
+    ["|", "|", ..rest] ->
+      advance_with_invalid_token(scanner, rest, invalid_token.OrOr)
+    ["|", ..rest] ->
+      advance_with_invalid_token(scanner, rest, invalid_token.BitwiseOr)
+    ["&", "&", ..rest] ->
+      advance_with_invalid_token(scanner, rest, invalid_token.AndAnd)
+    ["&", ..rest] ->
+      advance_with_invalid_token(scanner, rest, invalid_token.BitwiseAnd)
     ["/", "/", ..rest] ->
       advance(scanner, rest) |> advance_until_new_line |> scan_next_token
     ["/", ..rest] -> advance_with_token(scanner, rest, token.Slash)
@@ -127,6 +138,28 @@ fn add_line(scanner: Scanner, graphemes: List(String)) -> Scanner {
 
 fn token(scanner: Scanner, token_type: TokenType) -> Result(Token, ScanError) {
   Ok(token.Token(token_type, line: scanner.line, column: scanner.column))
+}
+
+fn advance_with_invalid_token(
+  scanner: Scanner,
+  graphemes: List(String),
+  invalid_token: InvalidToken,
+) -> #(Scanner, Result(Token, ScanError)) {
+  #(
+    Scanner(
+      graphemes,
+      column: scanner.column + invalid_token.lexeme_length(invalid_token),
+      line: scanner.line,
+    ),
+    Error(InvalidSyntax(
+      invalid_token,
+      span.line(
+        on: scanner.line,
+        start: scanner.column,
+        end: scanner.column + invalid_token.lexeme_length(invalid_token) - 1,
+      ),
+    )),
+  )
 }
 
 fn advance_until_new_line(scanner: Scanner) -> Scanner {
