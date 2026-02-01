@@ -57,6 +57,7 @@ fn run(code: String) -> Nil {
     |> errors.error_message(code)
     |> ansi.red
     |> io.println_error
+    io.println("")
   })
   use <- bool.guard(!list.is_empty(scan_errors), Nil)
   case parser.parse(tokens) {
@@ -71,6 +72,7 @@ fn run(code: String) -> Nil {
         |> errors.error_message(code)
         |> ansi.red
         |> io.println_error
+        io.println("")
       })
       |> result.unwrap(Nil)
     Error(parser_error) -> {
@@ -78,6 +80,7 @@ fn run(code: String) -> Nil {
       |> errors.error_message(code)
       |> ansi.red
       |> io.println_error
+      io.println("")
       Nil
     }
   }
