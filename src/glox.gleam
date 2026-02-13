@@ -73,7 +73,6 @@ fn run(code: String) -> Nil {
 
   let #(logs, maybe_runtime_erorr) = interperater.interperate(statements)
   list.each(logs, io.println)
-  io.println("")
 
   option.map(maybe_runtime_erorr, fn(runtime_error) {
     errors.from_runtime_error(runtime_error)

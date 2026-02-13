@@ -95,7 +95,7 @@ pub fn lexeme(token_type: TokenType) -> String {
     Var -> "var"
     While -> "while"
     Identifier(value) -> value
-    String(value) -> value
+    String(value) -> "\"" <> value <> "\""
     Number(value) -> value
   }
 }
