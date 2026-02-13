@@ -3,7 +3,7 @@ import errors
 import gleam/bool
 import gleam/io
 import gleam/list
-import gleam/result
+import gleam/option
 import gleam/string
 import gleam_community/ansi
 import input
@@ -60,30 +60,29 @@ fn run(code: String) -> Nil {
     io.println("")
   })
   use <- bool.guard(!list.is_empty(scan_errors), Nil)
-  case parser.parse(tokens) {
-    Ok(expression) ->
-      interperater.evaluate(expression)
-      |> result.map(fn(literal) {
-        interperater.literal_to_string(literal)
-        |> io.println
-      })
-      |> result.map_error(fn(runtime_error) {
-        errors.from_runtime_error(runtime_error)
-        |> errors.error_message(code)
-        |> ansi.red
-        |> io.println_error
-        io.println("")
-      })
-      |> result.unwrap(Nil)
-    Error(parser_error) -> {
-      errors.from_parse_error(parser_error, code)
-      |> errors.error_message(code)
-      |> ansi.red
-      |> io.println_error
-      io.println("")
-      Nil
-    }
-  }
+
+  let #(statements, parse_errors) = parser.parse(tokens)
+  list.each(parse_errors, fn(parse_error) {
+    errors.from_parse_error(parse_error, code)
+    |> errors.error_message(code)
+    |> ansi.red
+    |> io.println_error
+    io.println("")
+  })
+  use <- bool.guard(!list.is_empty(parse_errors), Nil)
+
+  let #(logs, maybe_runtime_erorr) = interperater.interperate(statements)
+  list.each(logs, io.println)
+  io.println("")
+
+  option.map(maybe_runtime_erorr, fn(runtime_error) {
+    errors.from_runtime_error(runtime_error)
+    |> errors.error_message(code)
+    |> ansi.red
+    |> io.println_error
+    io.println("")
+  })
+  Nil
 }
 
 @external(erlang, "erlang", "halt")

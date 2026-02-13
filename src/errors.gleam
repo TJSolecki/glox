@@ -15,6 +15,7 @@ pub type GloxError {
   MissingRightParen(line: Int, column: Int)
   ExpectExpression(line: Int, column: Int)
   MissingColon(line: Int, column: Int)
+  MissingSemicolon(span: Span)
   UnexpectedEof(line: Int, column: Int)
   UnsupportedUnaryOperator(invalid_unary_token: InvalidUnaryToken, span: Span)
   UnsupportedNegation(minus: Token, literal: Literal)
@@ -37,6 +38,7 @@ pub fn from_parse_error(parse_error: ParseError, source: String) -> GloxError {
     parser.MissingRightParen(line, column) -> MissingRightParen(line, column)
     parser.ExpectExpression(line, column) -> ExpectExpression(line, column)
     parser.MissingColon(line, column) -> MissingColon(line, column)
+    parser.MissingSemicolon(span) -> MissingSemicolon(span)
     parser.UnsupportedUnaryOperator(invalid_unary_token, span) ->
       UnsupportedUnaryOperator(invalid_unary_token, span)
     parser.UnexpectedEof -> {
@@ -92,6 +94,7 @@ fn error_title(scan_error: GloxError) -> String {
     ExpectExpression(..) -> "Missing expression"
     MissingRightParen(..) -> "Missing ')'"
     MissingColon(..) -> "Expected ':' before ';'"
+    MissingSemicolon(..) -> "Missing ';'"
     UnexpectedEof(..) -> "Unexpected end of file"
     UnsupportedUnaryOperator(..) -> "Missing left operand for `+`"
     UnsupportedOperation(left, operator, right) ->
@@ -131,6 +134,7 @@ fn error_description(error: GloxError) -> String {
     ExpectExpression(..) -> "We were expecting an expression here."
     MissingRightParen(..) -> "This parentheses was never closed."
     MissingColon(..) -> "This ternary has no ':'."
+    MissingSemicolon(..) -> "We were expecting an ';' here."
     UnexpectedEof(..) -> "We didn't expect to end here."
     UnsupportedUnaryOperator(..) ->
       "Lox does not support the unary `+` operation."
@@ -163,6 +167,7 @@ fn get_span(error: GloxError) -> Span {
     ExpectExpression(line: line, column: column) -> span.point(line, column)
     MissingRightParen(line: line, column: column) -> span.point(line, column)
     MissingColon(line: line, column: column) -> span.point(line, column)
+    MissingSemicolon(span: span) -> span
     UnexpectedEof(line: line, column: column) -> span.point(line, column)
     UnsupportedUnaryOperator(span: span, ..) -> span
     UnsupportedOperation(_, operator, ..) -> span.from_token(operator)

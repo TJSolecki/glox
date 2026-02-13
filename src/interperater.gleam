@@ -1,7 +1,9 @@
 import gleam/float
 import gleam/int
+import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/result
-import parser.{type Expression}
+import parser.{type Expression, type Statement}
 import token.{type Token}
 
 pub type Literal {
@@ -38,17 +40,62 @@ pub fn literal_to_string(literal: Literal) -> String {
   }
 }
 
+pub fn interperate(
+  statements: List(Statement),
+) -> #(List(String), Option(RuntimeError)) {
+  let #(maybe_logs, maybe_runtime_error) = interperate_loop(statements, [])
+  let logs =
+    list.flat_map(maybe_logs, fn(maybe_log) {
+      case maybe_log {
+        Some(log) -> [log]
+        None -> []
+      }
+    })
+  #(logs, maybe_runtime_error)
+}
+
+pub fn interperate_loop(
+  statements: List(Statement),
+  maybe_logs: List(Option(String)),
+) -> #(List(Option(String)), Option(RuntimeError)) {
+  case statements {
+    [statement, ..rest] -> {
+      case interperate_statement(statement) {
+        Ok(maybe_log) ->
+          interperate_loop(rest, list.append(maybe_logs, [maybe_log]))
+        Error(runtime_error) -> #(maybe_logs, Some(runtime_error))
+      }
+    }
+    _ -> #(maybe_logs, None)
+  }
+}
+
+fn interperate_statement(
+  statement: Statement,
+) -> Result(Option(String), RuntimeError) {
+  case statement {
+    parser.PrintStatement(expression) -> {
+      use literal <- result.try(evaluate(expression))
+      Ok(Some(literal_to_string(literal)))
+    }
+    parser.ExpressionStatement(expression) -> {
+      use _ <- result.try(evaluate(expression))
+      Ok(None)
+    }
+  }
+}
+
 pub fn evaluate(expression: Expression) -> EvalResult {
   case expression {
-    parser.LiteralBool(value) -> Ok(LiteralBool(value))
-    parser.LiteralNumber(value) -> Ok(LiteralNumber(value))
-    parser.LiteralString(value) -> Ok(LiteralString(value))
-    parser.LiteralNil -> Ok(LiteralNil)
-    parser.Grouping(inner_expression) -> evaluate(inner_expression)
-    parser.Unary(operator, right) -> evaluate_unary(operator, right)
-    parser.Binary(left, operator, right) ->
+    parser.LiteralBool(value, ..) -> Ok(LiteralBool(value))
+    parser.LiteralNumber(value, ..) -> Ok(LiteralNumber(value))
+    parser.LiteralString(value, ..) -> Ok(LiteralString(value))
+    parser.LiteralNil(..) -> Ok(LiteralNil)
+    parser.Grouping(inner_expression, ..) -> evaluate(inner_expression)
+    parser.Unary(operator, right, ..) -> evaluate_unary(operator, right)
+    parser.Binary(left, operator, right, ..) ->
       evaluate_binary(left, operator, right)
-    parser.Ternary(cond, left, right) -> evaluate_ternary(cond, left, right)
+    parser.Ternary(cond, left, right, ..) -> evaluate_ternary(cond, left, right)
   }
 }
 
