@@ -2,7 +2,9 @@ import gleam/bool
 import gleam/float
 import gleam/int
 import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/result
+import gleam/string
 import span.{type Span}
 import token.{type Token, type TokenType}
 
@@ -10,11 +12,14 @@ import token.{type Token, type TokenType}
 ///
 /// program        → statement* EOF ;
 ///
+/// declaration    → varDeclaration
+///                | statement ;
 /// statement      → exprStatement
 ///                | printStatement ;
 ///
 /// exprStatement  → expression ";" ;
 /// printStatement → "print" expression ";" ;
+/// varDeclaration → "var" IDENTIFIER ("=" expression)? ';' ;
 ///
 /// expression     → comma ;
 /// comma          → ternary ( "," ternary )*
@@ -27,13 +32,14 @@ import token.{type Token, type TokenType}
 /// unary          → ( "!" | "-" ) unary
 ///                | primary ;
 /// primary        → NUMBER | STRING | "true" | "false" | "nil"
-///                | "(" expression ")" ;
+///                | "(" expression ")" | IDENTIFIER ;
 pub type Program =
   List(Statement)
 
 pub type Statement {
   ExpressionStatement(expression: Expression)
   PrintStatement(expression: Expression)
+  VariableDeclaration(name: Token, expression: Option(Expression))
 }
 
 pub type Expression {
@@ -51,6 +57,7 @@ pub type Expression {
     false_expression: Expression,
     span: Span,
   )
+  Variable(token: Token, span: Span)
   LiteralString(value: String, span: Span)
   LiteralNumber(value: Float, span: Span)
   LiteralBool(value: Bool, span: Span)
@@ -62,6 +69,7 @@ pub type ParseError {
   ExpectExpression(line: Int, column: Int)
   MissingColon(line: Int, column: Int)
   MissingSemicolon(span: Span)
+  MissingVariableName(span: Span)
   UnsupportedUnaryOperator(invalid_unary_token: InvalidUnaryToken, span: Span)
   UnexpectedEof
 }
@@ -91,11 +99,124 @@ fn parser_loop(
   tokens: List(Token),
   statements: List(Result(Statement, ParseError)),
 ) -> List(Result(Statement, ParseError)) {
-  let StatementParser(rest_tokens, statement) = statement(tokens)
+  let StatementParser(rest_tokens, statement) = declaration(tokens)
   case rest_tokens {
     [token.Token(token_type: token_type, ..), ..] if token_type != token.Eof ->
       parser_loop(rest_tokens, list.prepend(statements, statement))
     _ -> list.prepend(statements, statement)
+  }
+}
+
+fn declaration(tokens: List(Token)) -> StatementParser {
+  let parser = case tokens {
+    [token.Token(token_type: token.Var, ..) as var, ..rest] ->
+      var_declaration(rest, var)
+    _ -> statement(tokens)
+  }
+  case parser.statement {
+    Ok(..) -> parser
+    Error(parse_error) ->
+      StatementParser(synchronize(parser.tokens), Error(parse_error))
+  }
+}
+
+fn var_declaration(tokens: List(Token), var_token: Token) -> StatementParser {
+  use name, tokens_after_name <- expect_identifier(
+    with: tokens,
+    or_else: MissingVariableName(span.from_token(var_token)),
+  )
+  case tokens_after_name {
+    [token.Token(token_type: token.Equal, ..), ..rest] ->
+      var_declaration_with_init(name, rest)
+    _ -> var_declaration_without_init(name, tokens_after_name)
+  }
+}
+
+fn var_declaration_without_init(
+  name: Token,
+  tokens: List(Token),
+) -> StatementParser {
+  use rest <- try_consume(
+    with: tokens,
+    expect: token.Semicolon,
+    or_else: MissingSemicolon(span.point(
+      name.line,
+      name.column + { name.token_type |> token.lexeme |> string.length },
+    )),
+  )
+  StatementParser(rest, Ok(VariableDeclaration(name, None)))
+}
+
+fn var_declaration_with_init(name, tokens: List(Token)) -> StatementParser {
+  use tokens_after_expression, expression <- try_unwrap_expression_parser(
+    expression(tokens),
+  )
+  let expression_span = get_span(expression)
+  use tokens_after_semicolon <- try_consume(
+    with: tokens_after_expression,
+    expect: token.Semicolon,
+    or_else: MissingSemicolon(span.point(
+      expression_span.end_line,
+      expression_span.end_column,
+    )),
+  )
+  StatementParser(
+    tokens_after_semicolon,
+    Ok(VariableDeclaration(name, Some(expression))),
+  )
+}
+
+fn expect_identifier(
+  with tokens: List(Token),
+  or_else parse_error: ParseError,
+  on_ok handle_ok: fn(Token, List(Token)) -> StatementParser,
+) -> StatementParser {
+  case tokens {
+    [token.Token(token_type: token.Identifier(..), ..) as identifier, ..rest] ->
+      handle_ok(identifier, rest)
+    _ -> StatementParser(tokens, Error(parse_error))
+  }
+}
+
+fn try_consume(
+  with tokens: List(Token),
+  expect token_type: TokenType,
+  or_else parse_error: ParseError,
+  on_ok handle_ok: fn(List(Token)) -> StatementParser,
+) -> StatementParser {
+  case tokens {
+    [token, ..rest] if token.token_type == token_type -> handle_ok(rest)
+    _ -> StatementParser(tokens, Error(parse_error))
+  }
+}
+
+fn try_unwrap_expression_parser(
+  parser: ExpressionParser,
+  handle_ok: fn(List(Token), Expression) -> StatementParser,
+) -> StatementParser {
+  case parser {
+    ExpressionParser(tokens, Ok(expression)) -> handle_ok(tokens, expression)
+    ExpressionParser(tokens, Error(parse_error)) ->
+      StatementParser(tokens, Error(parse_error))
+  }
+}
+
+fn synchronize(tokens: List(Token)) -> List(Token) {
+  case tokens {
+    [token.Token(token_type: token.Semicolon, ..), ..rest] -> rest
+    [token.Token(token_type: token_type, ..), ..]
+      if token_type == token.Class
+      || token_type == token.Fun
+      || token_type == token.Var
+      || token_type == token.For
+      || token_type == token.If
+      || token_type == token.While
+      || token_type == token.Print
+      || token_type == token.Return
+      || token_type == token.Eof
+    -> tokens
+    [_ignored_token, ..rest] -> synchronize(rest)
+    [] -> []
   }
 }
 
@@ -130,7 +251,7 @@ fn statement_helper(
         Error(
           MissingSemicolon(span.point(
             expression_span.end_line,
-            expression_span.end_column + 1,
+            expression_span.end_column,
           )),
         ),
       )
@@ -169,7 +290,10 @@ fn ternary(tokens: List(Token)) -> ExpressionParser {
     token.QuestionMark -> {
       use #(rest, true_clause) <- try_unwrap_parser(
         ternary(rest)
-        |> consume(token.Colon, MissingColon(token.line, token.column)),
+        |> consume_expression(
+          token.Colon,
+          MissingColon(token.line, token.column),
+        ),
       )
       use #(rest, false_clause) <- try_unwrap_parser(ternary(rest))
       ExpressionParser(
@@ -274,7 +398,7 @@ fn primary(tokens: List(Token)) -> ExpressionParser {
         token.LeftParen -> {
           let parser =
             expression(rest)
-            |> consume(
+            |> consume_expression(
               token.RightParen,
               MissingRightParen(token.line, token.column),
             )
@@ -292,6 +416,8 @@ fn primary(tokens: List(Token)) -> ExpressionParser {
             )),
           )
         }
+        token.Identifier(..) ->
+          ExpressionParser(rest, Ok(Variable(token, span.from_token(token))))
         _ ->
           ExpressionParser(
             rest,
@@ -302,7 +428,7 @@ fn primary(tokens: List(Token)) -> ExpressionParser {
   }
 }
 
-fn consume(
+fn consume_expression(
   parser: ExpressionParser,
   token_type: TokenType,
   parse_error: ParseError,
@@ -348,6 +474,7 @@ fn get_span(expression: Expression) -> Span {
     Ternary(span: span, ..) -> span
     Binary(span: span, ..) -> span
     Unary(span: span, ..) -> span
+    Variable(span: span, ..) -> span
     LiteralNumber(span: span, ..) -> span
     LiteralString(span: span, ..) -> span
     LiteralBool(span: span, ..) -> span
@@ -409,6 +536,7 @@ pub fn pretty_print(expression: Expression) -> String {
       <> " : "
       <> pretty_print(false_expression)
       <> ")"
+    Variable(token, ..) -> token.lexeme(token.token_type)
     LiteralString(value, ..) -> value
     LiteralNumber(value, ..) -> {
       case value == float.floor(value) {

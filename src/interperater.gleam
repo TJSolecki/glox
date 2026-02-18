@@ -1,25 +1,26 @@
+import environment.{type Environment}
 import gleam/float
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
+import interperater_types.{
+  type Literal, type RuntimeError, LiteralBool, LiteralNil, LiteralNumber,
+  LiteralString, UnsupportedNegation, UnsupportedOperation,
+}
 import parser.{type Expression, type Statement}
 import token.{type Token}
 
-pub type Literal {
-  LiteralBool(value: Bool)
-  LiteralNumber(value: Float)
-  LiteralString(value: String)
-  LiteralNil
-}
-
-pub type RuntimeError {
-  UnsupportedNegation(minus: Token, literal: Literal)
-  UnsupportedOperation(left: Literal, operator: Token, right: Literal)
-}
-
 pub type EvalResult =
   Result(Literal, RuntimeError)
+
+pub type InterperateResult {
+  InterperateResult(
+    logs: List(String),
+    runtime_error: Option(RuntimeError),
+    env: Environment,
+  )
+}
 
 pub fn literal_to_string(literal: Literal) -> String {
   case literal {
@@ -42,65 +43,82 @@ pub fn literal_to_string(literal: Literal) -> String {
 
 pub fn interperate(
   statements: List(Statement),
-) -> #(List(String), Option(RuntimeError)) {
-  let #(maybe_logs, maybe_runtime_error) = interperate_loop(statements, [])
-  let logs =
-    list.flat_map(maybe_logs, fn(maybe_log) {
-      case maybe_log {
-        Some(log) -> [log]
-        None -> []
-      }
-    })
-  #(logs, maybe_runtime_error)
+  env: Environment,
+) -> InterperateResult {
+  interperate_loop(statements, [], env)
 }
 
 pub fn interperate_loop(
   statements: List(Statement),
-  maybe_logs: List(Option(String)),
-) -> #(List(Option(String)), Option(RuntimeError)) {
+  logs: List(String),
+  env: Environment,
+) -> InterperateResult {
   case statements {
     [statement, ..rest] -> {
-      case interperate_statement(statement) {
-        Ok(maybe_log) ->
-          interperate_loop(rest, list.append(maybe_logs, [maybe_log]))
-        Error(runtime_error) -> #(maybe_logs, Some(runtime_error))
+      case interperate_statement(statement, env) {
+        #(Ok(Some(log)), env) ->
+          interperate_loop(rest, list.append(logs, [log]), env)
+        #(Ok(None), env) -> interperate_loop(rest, logs, env)
+        #(Error(runtime_error), env) ->
+          InterperateResult(logs, Some(runtime_error), env)
       }
     }
-    _ -> #(maybe_logs, None)
+    _ -> InterperateResult(logs, None, env)
   }
 }
 
 fn interperate_statement(
   statement: Statement,
-) -> Result(Option(String), RuntimeError) {
+  env: Environment,
+) -> #(Result(Option(String), RuntimeError), Environment) {
   case statement {
     parser.PrintStatement(expression) -> {
-      use literal <- result.try(evaluate(expression))
-      Ok(Some(literal_to_string(literal)))
+      case evaluate(expression, env) {
+        Ok(literal) -> #(Ok(Some(literal_to_string(literal))), env)
+        Error(runtime_error) -> #(Error(runtime_error), env)
+      }
     }
     parser.ExpressionStatement(expression) -> {
-      use _ <- result.try(evaluate(expression))
-      Ok(None)
+      case evaluate(expression, env) {
+        Ok(..) -> #(Ok(None), env)
+        Error(runtime_error) -> #(Error(runtime_error), env)
+      }
+    }
+    parser.VariableDeclaration(name, None) -> #(
+      Ok(None),
+      environment.declare(env, name, LiteralNil),
+    )
+    parser.VariableDeclaration(name, Some(expression)) -> {
+      case evaluate(expression, env) {
+        Ok(literal) -> #(Ok(None), environment.declare(env, name, literal))
+        Error(parse_error) -> #(Error(parse_error), env)
+      }
     }
   }
 }
 
-pub fn evaluate(expression: Expression) -> EvalResult {
+pub fn evaluate(expression: Expression, env: Environment) -> EvalResult {
   case expression {
     parser.LiteralBool(value, ..) -> Ok(LiteralBool(value))
     parser.LiteralNumber(value, ..) -> Ok(LiteralNumber(value))
     parser.LiteralString(value, ..) -> Ok(LiteralString(value))
     parser.LiteralNil(..) -> Ok(LiteralNil)
-    parser.Grouping(inner_expression, ..) -> evaluate(inner_expression)
-    parser.Unary(operator, right, ..) -> evaluate_unary(operator, right)
+    parser.Grouping(inner_expression, ..) -> evaluate(inner_expression, env)
+    parser.Unary(operator, right, ..) -> evaluate_unary(operator, right, env)
     parser.Binary(left, operator, right, ..) ->
-      evaluate_binary(left, operator, right)
-    parser.Ternary(cond, left, right, ..) -> evaluate_ternary(cond, left, right)
+      evaluate_binary(left, operator, right, env)
+    parser.Ternary(cond, left, right, ..) ->
+      evaluate_ternary(cond, left, right, env)
+    parser.Variable(name, ..) -> environment.get(env, name)
   }
 }
 
-fn evaluate_unary(operator: Token, right: Expression) -> EvalResult {
-  use literal <- result.try(evaluate(right))
+fn evaluate_unary(
+  operator: Token,
+  right: Expression,
+  env: Environment,
+) -> EvalResult {
+  use literal <- result.try(evaluate(right, env))
   case operator.token_type {
     token.Bang -> Ok(LiteralBool(!is_truthy(literal)))
     token.Minus -> {
@@ -138,9 +156,10 @@ fn evaluate_binary(
   left: Expression,
   operator: Token,
   right: Expression,
+  env: Environment,
 ) -> EvalResult {
-  use left_literal <- result.try(evaluate(left))
-  use right_literal <- result.try(evaluate(right))
+  use left_literal <- result.try(evaluate(left, env))
+  use right_literal <- result.try(evaluate(right, env))
   case operator.token_type {
     token.Minus -> operate_on_numbers(left_literal, operator, right_literal)
     token.Star -> operate_on_numbers(left_literal, operator, right_literal)
@@ -232,10 +251,11 @@ fn evaluate_ternary(
   condition: Expression,
   left: Expression,
   right: Expression,
+  env: Environment,
 ) -> EvalResult {
-  use condition_literal <- result.try(evaluate(condition))
+  use condition_literal <- result.try(evaluate(condition, env))
   case is_truthy(condition_literal) {
-    True -> evaluate(left)
-    False -> evaluate(right)
+    True -> evaluate(left, env)
+    False -> evaluate(right, env)
   }
 }

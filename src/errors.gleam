@@ -2,7 +2,7 @@ import gleam/int
 import gleam/list
 import gleam/result
 import gleam/string
-import interperater.{type Literal, type RuntimeError}
+import interperater_types.{type Literal, type RuntimeError}
 import invalid_token.{type InvalidToken}
 import parser.{type InvalidUnaryToken, type ParseError}
 import scanner.{type ScanError}
@@ -10,17 +10,19 @@ import span.{type Span}
 import token.{type Token}
 
 pub type GloxError {
-  UnterminatedString(line: Int, column: Int)
-  UnexpectedGrapheme(grapheme: String, line: Int, column: Int)
-  MissingRightParen(line: Int, column: Int)
   ExpectExpression(line: Int, column: Int)
+  InvalidSyntax(invalid_token: InvalidToken, span: Span)
   MissingColon(line: Int, column: Int)
+  MissingRightParen(line: Int, column: Int)
   MissingSemicolon(span: Span)
+  MissingVariableName(span: Span)
+  UndefinedVariable(name: Token)
   UnexpectedEof(line: Int, column: Int)
-  UnsupportedUnaryOperator(invalid_unary_token: InvalidUnaryToken, span: Span)
+  UnexpectedGrapheme(grapheme: String, line: Int, column: Int)
   UnsupportedNegation(minus: Token, literal: Literal)
   UnsupportedOperation(left: Literal, operator: Token, right: Literal)
-  InvalidSyntax(invalid_token: InvalidToken, span: Span)
+  UnsupportedUnaryOperator(invalid_unary_token: InvalidUnaryToken, span: Span)
+  UnterminatedString(line: Int, column: Int)
 }
 
 pub fn from_scan_error(scan_error: ScanError) -> GloxError {
@@ -38,7 +40,9 @@ pub fn from_parse_error(parse_error: ParseError, source: String) -> GloxError {
     parser.MissingRightParen(line, column) -> MissingRightParen(line, column)
     parser.ExpectExpression(line, column) -> ExpectExpression(line, column)
     parser.MissingColon(line, column) -> MissingColon(line, column)
-    parser.MissingSemicolon(span) -> MissingSemicolon(span)
+    parser.MissingSemicolon(span) ->
+      MissingSemicolon(span.point(span.end_line, span.end_column + 1))
+    parser.MissingVariableName(span) -> MissingVariableName(span)
     parser.UnsupportedUnaryOperator(invalid_unary_token, span) ->
       UnsupportedUnaryOperator(invalid_unary_token, span)
     parser.UnexpectedEof -> {
@@ -56,10 +60,11 @@ pub fn from_parse_error(parse_error: ParseError, source: String) -> GloxError {
 
 pub fn from_runtime_error(runtime_error: RuntimeError) -> GloxError {
   case runtime_error {
-    interperater.UnsupportedNegation(minus, literal) ->
+    interperater_types.UnsupportedNegation(minus, literal) ->
       UnsupportedNegation(minus, literal)
-    interperater.UnsupportedOperation(left, operator, right) ->
+    interperater_types.UnsupportedOperation(left, operator, right) ->
       UnsupportedOperation(left, operator, right)
+    interperater_types.UndefinedVariable(name) -> UndefinedVariable(name)
   }
 }
 
@@ -95,6 +100,8 @@ fn error_title(scan_error: GloxError) -> String {
     MissingRightParen(..) -> "Missing ')'"
     MissingColon(..) -> "Expected ':' before ';'"
     MissingSemicolon(..) -> "Missing ';'"
+    MissingVariableName(..) -> "Missing variable name"
+    UndefinedVariable(..) -> "Undefined variable"
     UnexpectedEof(..) -> "Unexpected end of file"
     UnsupportedUnaryOperator(..) -> "Missing left operand for `+`"
     UnsupportedOperation(left, operator, right) ->
@@ -119,10 +126,10 @@ fn error_title(scan_error: GloxError) -> String {
 
 fn literal_type_name(literal: Literal) -> String {
   case literal {
-    interperater.LiteralString(..) -> "string"
-    interperater.LiteralNumber(..) -> "number"
-    interperater.LiteralBool(..) -> "bool"
-    interperater.LiteralNil -> "nil"
+    interperater_types.LiteralString(..) -> "string"
+    interperater_types.LiteralNumber(..) -> "number"
+    interperater_types.LiteralBool(..) -> "bool"
+    interperater_types.LiteralNil -> "nil"
   }
 }
 
@@ -135,6 +142,12 @@ fn error_description(error: GloxError) -> String {
     MissingRightParen(..) -> "This parentheses was never closed."
     MissingColon(..) -> "This ternary has no ':'."
     MissingSemicolon(..) -> "We were expecting an ';' here."
+    MissingVariableName(..) ->
+      "We expect a variable name to be defined after `var`."
+    UndefinedVariable(name) ->
+      "There is no variable defined with the name `"
+      <> token.lexeme(name.token_type)
+      <> "`."
     UnexpectedEof(..) -> "We didn't expect to end here."
     UnsupportedUnaryOperator(..) ->
       "Lox does not support the unary `+` operation."
@@ -168,6 +181,8 @@ fn get_span(error: GloxError) -> Span {
     MissingRightParen(line: line, column: column) -> span.point(line, column)
     MissingColon(line: line, column: column) -> span.point(line, column)
     MissingSemicolon(span: span) -> span
+    MissingVariableName(span) -> span
+    UndefinedVariable(name) -> span.from_token(name)
     UnexpectedEof(line: line, column: column) -> span.point(line, column)
     UnsupportedUnaryOperator(span: span, ..) -> span
     UnsupportedOperation(_, operator, ..) -> span.from_token(operator)

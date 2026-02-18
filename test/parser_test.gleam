@@ -12,7 +12,7 @@ pub fn parse_unexpected_expression_error_test() {
 pub fn parse_unsupported_unary_operator_error_test() {
   let source = "+1;"
   let tokens = scanner.scan(source).0
-  let assert #([_], [parse_error]) = parser.parse(tokens)
+  let assert #([], [parse_error]) = parser.parse(tokens)
   assert parse_error
     == parser.UnsupportedUnaryOperator(parser.Plus, span.point(1, 1))
 }
