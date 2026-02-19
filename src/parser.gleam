@@ -14,9 +14,11 @@ import token.{type Token, type TokenType}
 ///
 /// declaration    → varDeclaration
 ///                | statement ;
-/// statement      → exprStatement
-///                | printStatement ;
+/// statement      → exprStmt
+///                | printStmt
+///                | block ;
 ///
+/// block          → "{" varDeclaration* "}" ;
 /// exprStatement  → expression ";" ;
 /// printStatement → "print" expression ";" ;
 /// varDeclaration → "var" IDENTIFIER ("=" expression)? ';' ;
@@ -39,6 +41,7 @@ pub type Program =
   List(Statement)
 
 pub type Statement {
+  Block(statements: List(Statement))
   ExpressionStatement(expression: Expression)
   PrintStatement(expression: Expression)
   VariableDeclaration(name: Token, expression: Option(Expression))
@@ -68,6 +71,7 @@ pub type Expression {
 }
 
 pub type ParseError {
+  MissingRightBrace(span: Span)
   MissingRightParen(line: Int, column: Int)
   ExpectExpression(line: Int, column: Int)
   MissingColon(line: Int, column: Int)
@@ -224,15 +228,44 @@ fn synchronize(tokens: List(Token)) -> List(Token) {
   }
 }
 
+/// statement → exprStmt
+///           | printStmt
+///           | block ;
 fn statement(tokens: List(Token)) -> StatementParser {
   case tokens {
     [token.Token(token_type: token.Print, ..), ..rest] -> print_statement(rest)
+    [left_brace, ..rest] if left_brace.token_type == token.LeftBrace ->
+      block(left_brace, rest)
     _ -> expression_statement(tokens)
   }
 }
 
 fn print_statement(tokens: List(Token)) -> StatementParser {
   statement_helper(tokens, PrintStatement)
+}
+
+fn block(left_brace: Token, tokens: List(Token)) -> StatementParser {
+  block_loop(left_brace, tokens, [])
+}
+
+fn block_loop(
+  left_brace: Token,
+  tokens: List(Token),
+  statements: List(Statement),
+) -> StatementParser {
+  case tokens {
+    [token.Token(token_type: token.RightBrace, ..), ..rest] ->
+      StatementParser(rest, Ok(Block(statements)))
+    [token.Token(token_type: token.Eof, ..)] ->
+      StatementParser(
+        tokens,
+        Error(MissingRightBrace(span.from_token(left_brace))),
+      )
+    tokens -> {
+      use rest, statement <- try_unwrap_statement_parser(declaration(tokens))
+      block_loop(left_brace, rest, statements |> list.append([statement]))
+    }
+  }
 }
 
 fn expression_statement(tokens: List(Token)) -> StatementParser {
@@ -521,6 +554,16 @@ fn try_unwrap_parser(
   case parser {
     ExpressionParser(expression: Error(_), ..) -> parser
     ExpressionParser(tokens, Ok(expression)) -> handle_ok(tokens, expression)
+  }
+}
+
+fn try_unwrap_statement_parser(
+  parser: StatementParser,
+  handle_ok: fn(List(Token), Statement) -> StatementParser,
+) -> StatementParser {
+  case parser {
+    StatementParser(tokens, Ok(statement)) -> handle_ok(tokens, statement)
+    StatementParser(statement: Error(_), ..) -> parser
   }
 }
 

@@ -148,3 +148,44 @@ pub fn evaluate_expression_test() {
     interperater.interperate(statements, environment.new())
   assert actual_logs == expected_logs as message
 }
+
+pub fn environment_scope_test() {
+  let source =
+    "
+var a = \"global a\";
+var b = \"global b\";
+var c = \"global c\";
+{
+  var a = \"outer a\";
+  var b = \"outer b\";
+  {
+    var a = \"inner a\";
+    print a;
+    print b;
+    print c;
+  }
+  print a;
+  print b;
+  print c;
+}
+print a;
+print b;
+print c;
+  "
+  let tokens = scanner.scan(source).0
+  let #(statements, _) = parser.parse(tokens)
+  let InterperateResult(logs: logs, ..) =
+    interperater.interperate(statements, environment.new())
+  assert logs
+    == [
+      "inner a",
+      "outer b",
+      "global c",
+      "outer a",
+      "outer b",
+      "global c",
+      "global a",
+      "global b",
+      "global c",
+    ]
+}

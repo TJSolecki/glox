@@ -55,11 +55,14 @@ pub fn interperate_loop(
   case statements {
     [statement, ..rest] -> {
       case interperate_statement(statement, env) {
-        #(Ok(Some(log)), env) ->
-          interperate_loop(rest, list.append(logs, [log]), env)
-        #(Ok(None), env) -> interperate_loop(rest, logs, env)
-        #(Error(runtime_error), env) ->
-          InterperateResult(logs, Some(runtime_error), env)
+        InterperateResult(new_logs, None, env) ->
+          interperate_loop(rest, list.append(logs, new_logs), env)
+        InterperateResult(new_logs, Some(runtime_error), env) ->
+          InterperateResult(
+            list.append(logs, new_logs),
+            Some(runtime_error),
+            env,
+          )
       }
     }
     _ -> InterperateResult(logs, None, env)
@@ -69,32 +72,37 @@ pub fn interperate_loop(
 fn interperate_statement(
   statement: Statement,
   env: Environment,
-) -> #(Result(Option(String), RuntimeError), Environment) {
+) -> InterperateResult {
   case statement {
     parser.PrintStatement(expression) -> {
       case evaluate(expression, env) {
-        #(Ok(literal), env) -> #(Ok(Some(literal_to_string(literal))), env)
-        #(Error(runtime_error), env) -> #(Error(runtime_error), env)
+        #(Ok(literal), env) ->
+          InterperateResult([literal_to_string(literal)], None, env)
+        #(Error(runtime_error), env) ->
+          InterperateResult([], Some(runtime_error), env)
       }
     }
     parser.ExpressionStatement(expression) -> {
       case evaluate(expression, env) {
-        #(Ok(..), env) -> #(Ok(None), env)
-        #(Error(runtime_error), env) -> #(Error(runtime_error), env)
+        #(Ok(..), env) -> InterperateResult([], None, env)
+        #(Error(runtime_error), env) ->
+          InterperateResult([], Some(runtime_error), env)
       }
     }
-    parser.VariableDeclaration(name, None) -> #(
-      Ok(None),
-      environment.declare(env, name, LiteralNil),
-    )
+    parser.VariableDeclaration(name, None) ->
+      InterperateResult([], None, environment.declare(env, name, LiteralNil))
     parser.VariableDeclaration(name, Some(expression)) -> {
       case evaluate(expression, env) {
-        #(Ok(literal), env) -> #(
-          Ok(None),
-          environment.declare(env, name, literal),
-        )
-        #(Error(parse_error), env) -> #(Error(parse_error), env)
+        #(Ok(literal), env) ->
+          InterperateResult([], None, environment.declare(env, name, literal))
+        #(Error(parse_error), env) ->
+          InterperateResult([], Some(parse_error), env)
       }
+    }
+    parser.Block(statements) -> {
+      let InterperateResult(logs, runtime_error, ..) =
+        interperate_loop(statements, [], environment.create_shadow_env(env))
+      InterperateResult(logs, runtime_error, env)
     }
   }
 }

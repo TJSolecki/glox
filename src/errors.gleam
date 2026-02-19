@@ -14,6 +14,7 @@ pub type GloxError {
   InvalidAssignmentTarget(span: Span)
   InvalidSyntax(invalid_token: InvalidToken, span: Span)
   MissingColon(line: Int, column: Int)
+  MissingRightBrace(span: Span)
   MissingRightParen(line: Int, column: Int)
   MissingSemicolon(span: Span)
   MissingVariableName(span: Span)
@@ -38,6 +39,7 @@ pub fn from_scan_error(scan_error: ScanError) -> GloxError {
 
 pub fn from_parse_error(parse_error: ParseError, source: String) -> GloxError {
   case parse_error {
+    parser.MissingRightBrace(span) -> MissingRightBrace(span)
     parser.MissingRightParen(line, column) -> MissingRightParen(line, column)
     parser.ExpectExpression(line, column) -> ExpectExpression(line, column)
     parser.MissingColon(line, column) -> MissingColon(line, column)
@@ -106,6 +108,7 @@ fn error_title(scan_error: GloxError) -> String {
       "Unsupported operation '|'"
     InvalidSyntax(invalid_token: invalid_token.OrOr, ..) -> "Wrong logical 'or'"
     MissingColon(..) -> "Expected ':' before ';'"
+    MissingRightBrace(..) -> "Missing '}'"
     MissingRightParen(..) -> "Missing ')'"
     MissingSemicolon(..) -> "Missing ';'"
     MissingVariableName(..) -> "Missing variable name"
@@ -150,6 +153,7 @@ fn error_description(error: GloxError) -> String {
     InvalidSyntax(invalid_token: invalid_token.OrOr, ..) ->
       "Lox uses the keyword 'or', not '||'"
     MissingColon(..) -> "This ternary has no ':'."
+    MissingRightBrace(..) -> "This block was never closed."
     MissingRightParen(..) -> "This parentheses was never closed."
     MissingSemicolon(..) -> "We were expecting an ';' here."
     MissingVariableName(..) ->
@@ -183,6 +187,7 @@ fn get_span(error: GloxError) -> Span {
     InvalidAssignmentTarget(span) -> span
     InvalidSyntax(span: span, ..) -> span
     MissingColon(line: line, column: column) -> span.point(line, column)
+    MissingRightBrace(span) -> span
     MissingRightParen(line: line, column: column) -> span.point(line, column)
     MissingSemicolon(span: span) -> span
     MissingVariableName(span) -> span
