@@ -22,6 +22,8 @@ import token.{type Token, type TokenType}
 /// varDeclaration → "var" IDENTIFIER ("=" expression)? ';' ;
 ///
 /// expression     → comma ;
+/// assignment     → IDENTIFIER "=" assignment
+///                | comma;
 /// comma          → ternary ( "," ternary )*
 /// ternary        → equality
 ///                | ( equality "?" ternary ":" ternary ) ;
@@ -43,6 +45,7 @@ pub type Statement {
 }
 
 pub type Expression {
+  Assign(name: Token, value: Expression, span: Span)
   Grouping(expression: Expression, span: Span)
   Unary(token: Token, expression: Expression, span: Span)
   Binary(
@@ -70,6 +73,7 @@ pub type ParseError {
   MissingColon(line: Int, column: Int)
   MissingSemicolon(span: Span)
   MissingVariableName(span: Span)
+  InvalidAssignmentTarget(span: Span)
   UnsupportedUnaryOperator(invalid_unary_token: InvalidUnaryToken, span: Span)
   UnexpectedEof
 }
@@ -269,9 +273,36 @@ fn unwrap_expression_to_statement(
   }
 }
 
-/// expression → comma ;
+/// expression → assignment ;
 fn expression(tokens: List(Token)) -> ExpressionParser {
-  comma(tokens)
+  assignment(tokens)
+}
+
+/// assignment → IDENTIFIER "=" assignment
+///            | comma;
+fn assignment(tokens: List(Token)) -> ExpressionParser {
+  use tokens_after_identifier, expression <- try_unwrap_parser(comma(tokens))
+  case tokens_after_identifier, expression {
+    [equals, ..tokens_after_equals], Variable(name, variable_span)
+      if equals.token_type == token.Equal
+    -> {
+      use tokens_after_assignment, value <- try_unwrap_parser(assignment(
+        tokens_after_equals,
+      ))
+      ExpressionParser(
+        tokens_after_assignment,
+        Ok(Assign(name, value, span.add(variable_span, get_span(value)))),
+      )
+    }
+    [equals, ..tokens_after_equals], not_variable
+      if equals.token_type == token.Equal
+    ->
+      ExpressionParser(
+        tokens_after_equals,
+        Error(InvalidAssignmentTarget(get_span(not_variable))),
+      )
+    _, _ -> ExpressionParser(tokens_after_identifier, Ok(expression))
+  }
 }
 
 /// comma → ternary ( ',' ternary )*
@@ -283,19 +314,19 @@ fn comma(tokens: List(Token)) -> ExpressionParser {
 /// ternary → equality
 ///         | ( equality '?' ternary ':' ternary ) ;
 fn ternary(tokens: List(Token)) -> ExpressionParser {
-  use #(rest, equality_expression) <- try_unwrap_parser(equality(tokens))
+  use rest, equality_expression <- try_unwrap_parser(equality(tokens))
   let equality = ExpressionParser(rest, Ok(equality_expression))
   use #(token, rest) <- try_advance(equality)
   case token.token_type {
     token.QuestionMark -> {
-      use #(rest, true_clause) <- try_unwrap_parser(
+      use rest, true_clause <- try_unwrap_parser(
         ternary(rest)
         |> consume_expression(
           token.Colon,
           MissingColon(token.line, token.column),
         ),
       )
-      use #(rest, false_clause) <- try_unwrap_parser(ternary(rest))
+      use rest, false_clause <- try_unwrap_parser(ternary(rest))
       ExpressionParser(
         rest,
         Ok(Ternary(
@@ -348,7 +379,7 @@ fn unary(tokens: List(Token)) -> ExpressionParser {
       if unary_operator.token_type == token.Bang
       || unary_operator.token_type == token.Minus
     -> {
-      use #(rest, expression) <- try_unwrap_parser(unary(rest))
+      use rest, expression <- try_unwrap_parser(unary(rest))
       ExpressionParser(
         rest,
         Ok(Unary(
@@ -404,7 +435,7 @@ fn primary(tokens: List(Token)) -> ExpressionParser {
             )
           let right_paren =
             list.first(rest) |> result.lazy_unwrap(fn() { panic })
-          use #(rest, expression) <- try_unwrap_parser(parser)
+          use rest, expression <- try_unwrap_parser(parser)
           ExpressionParser(
             rest,
             Ok(Grouping(
@@ -446,7 +477,7 @@ fn match_zero_or_more(
   matching token_types: List(TokenType),
   using parse_rule: fn(List(Token)) -> ExpressionParser,
 ) -> ExpressionParser {
-  use #(_, left_expression) <- try_unwrap_parser(start)
+  use _, left_expression <- try_unwrap_parser(start)
   use #(token, rest) <- try_advance(start)
   case list.contains(token_types, token.token_type) {
     False -> start
@@ -470,6 +501,7 @@ fn match_zero_or_more(
 
 fn get_span(expression: Expression) -> Span {
   case expression {
+    Assign(span: span, ..) -> span
     Grouping(span: span, ..) -> span
     Ternary(span: span, ..) -> span
     Binary(span: span, ..) -> span
@@ -484,11 +516,11 @@ fn get_span(expression: Expression) -> Span {
 
 fn try_unwrap_parser(
   parser: ExpressionParser,
-  handle_ok: fn(#(List(Token), Expression)) -> ExpressionParser,
+  handle_ok: fn(List(Token), Expression) -> ExpressionParser,
 ) -> ExpressionParser {
   case parser {
     ExpressionParser(expression: Error(_), ..) -> parser
-    ExpressionParser(tokens, Ok(expression)) -> handle_ok(#(tokens, expression))
+    ExpressionParser(tokens, Ok(expression)) -> handle_ok(tokens, expression)
   }
 }
 
@@ -512,6 +544,12 @@ pub fn parse_lox_number(value: String) -> Float {
 
 pub fn pretty_print(expression: Expression) -> String {
   case expression {
+    Assign(name, value, ..) ->
+      "( "
+      <> token.lexeme(name.token_type)
+      <> " = "
+      <> pretty_print(value)
+      <> " )"
     Grouping(group_expression, ..) ->
       "(group " <> pretty_print(group_expression) <> ")"
     Unary(token, unary_expression, ..) ->

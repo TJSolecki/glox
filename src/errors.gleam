@@ -11,6 +11,7 @@ import token.{type Token}
 
 pub type GloxError {
   ExpectExpression(line: Int, column: Int)
+  InvalidAssignmentTarget(span: Span)
   InvalidSyntax(invalid_token: InvalidToken, span: Span)
   MissingColon(line: Int, column: Int)
   MissingRightParen(line: Int, column: Int)
@@ -45,6 +46,7 @@ pub fn from_parse_error(parse_error: ParseError, source: String) -> GloxError {
     parser.MissingVariableName(span) -> MissingVariableName(span)
     parser.UnsupportedUnaryOperator(invalid_unary_token, span) ->
       UnsupportedUnaryOperator(invalid_unary_token, span)
+    parser.InvalidAssignmentTarget(span) -> InvalidAssignmentTarget(span)
     parser.UnexpectedEof -> {
       let lines = string.split(source, on: "\n")
       let final_line = list.last(lines)
@@ -94,16 +96,24 @@ pub fn error_message(error: GloxError, source: String) {
 
 fn error_title(scan_error: GloxError) -> String {
   case scan_error {
-    UnexpectedGrapheme(..) -> "Unexpected character"
-    UnterminatedString(..) -> "Unterminated string"
     ExpectExpression(..) -> "Missing expression"
-    MissingRightParen(..) -> "Missing ')'"
+    InvalidAssignmentTarget(..) -> "Invalid assignment target"
+    InvalidSyntax(invalid_token: invalid_token.AndAnd, ..) ->
+      "Wrong logical 'and'"
+    InvalidSyntax(invalid_token: invalid_token.BitwiseAnd, ..) ->
+      "Unsupported operation '&'"
+    InvalidSyntax(invalid_token: invalid_token.BitwiseOr, ..) ->
+      "Unsupported operation '|'"
+    InvalidSyntax(invalid_token: invalid_token.OrOr, ..) -> "Wrong logical 'or'"
     MissingColon(..) -> "Expected ':' before ';'"
+    MissingRightParen(..) -> "Missing ')'"
     MissingSemicolon(..) -> "Missing ';'"
     MissingVariableName(..) -> "Missing variable name"
     UndefinedVariable(..) -> "Undefined variable"
     UnexpectedEof(..) -> "Unexpected end of file"
-    UnsupportedUnaryOperator(..) -> "Missing left operand for `+`"
+    UnexpectedGrapheme(..) -> "Unexpected character"
+    UnsupportedNegation(_, literal) ->
+      "Illegal `" <> literal_type_name(literal) <> "` negation"
     UnsupportedOperation(left, operator, right) ->
       "Unsupported operation `"
       <> literal_type_name(left)
@@ -112,15 +122,8 @@ fn error_title(scan_error: GloxError) -> String {
       <> " `"
       <> literal_type_name(right)
       <> "`"
-    UnsupportedNegation(_, literal) ->
-      "Illegal `" <> literal_type_name(literal) <> "` negation"
-    InvalidSyntax(invalid_token: invalid_token.AndAnd, ..) ->
-      "Wrong logical 'and'"
-    InvalidSyntax(invalid_token: invalid_token.OrOr, ..) -> "Wrong logical 'or'"
-    InvalidSyntax(invalid_token: invalid_token.BitwiseOr, ..) ->
-      "Unsupported operation '|'"
-    InvalidSyntax(invalid_token: invalid_token.BitwiseAnd, ..) ->
-      "Unsupported operation '&'"
+    UnsupportedUnaryOperator(..) -> "Missing left operand for `+`"
+    UnterminatedString(..) -> "Unterminated string"
   }
 }
 
@@ -135,12 +138,19 @@ fn literal_type_name(literal: Literal) -> String {
 
 fn error_description(error: GloxError) -> String {
   case error {
-    UnexpectedGrapheme(grapheme, ..) ->
-      "We weren't expecting a \"" <> grapheme <> "\" here."
-    UnterminatedString(..) -> "This string was never closed."
     ExpectExpression(..) -> "We were expecting an expression here."
-    MissingRightParen(..) -> "This parentheses was never closed."
+    InvalidAssignmentTarget(..) ->
+      "Lox only supports assigning values to variables."
+    InvalidSyntax(invalid_token: invalid_token.AndAnd, ..) ->
+      "Lox uses the keyword 'and', not '&&'."
+    InvalidSyntax(invalid_token: invalid_token.BitwiseAnd, ..) ->
+      "Lox does not support the bitwise and operation."
+    InvalidSyntax(invalid_token: invalid_token.BitwiseOr, ..) ->
+      "Lox does not support the bitwise or operation."
+    InvalidSyntax(invalid_token: invalid_token.OrOr, ..) ->
+      "Lox uses the keyword 'or', not '||'"
     MissingColon(..) -> "This ternary has no ':'."
+    MissingRightParen(..) -> "This parentheses was never closed."
     MissingSemicolon(..) -> "We were expecting an ';' here."
     MissingVariableName(..) ->
       "We expect a variable name to be defined after `var`."
@@ -149,8 +159,10 @@ fn error_description(error: GloxError) -> String {
       <> token.lexeme(name.token_type)
       <> "`."
     UnexpectedEof(..) -> "We didn't expect to end here."
-    UnsupportedUnaryOperator(..) ->
-      "Lox does not support the unary `+` operation."
+    UnexpectedGrapheme(grapheme, ..) ->
+      "We weren't expecting a \"" <> grapheme <> "\" here."
+    UnsupportedNegation(_, literal) ->
+      "We cannot negate `" <> literal_type_name(literal) <> "`s within Lox."
     UnsupportedOperation(left, operator, right) ->
       "Lox does not support the `"
       <> token.lexeme(operator.token_type)
@@ -159,35 +171,29 @@ fn error_description(error: GloxError) -> String {
       <> "`s and `"
       <> literal_type_name(right)
       <> "`s."
-    UnsupportedNegation(_, literal) ->
-      "We cannot negate `" <> literal_type_name(literal) <> "`s within Lox."
-    InvalidSyntax(invalid_token: invalid_token.AndAnd, ..) ->
-      "Lox uses the keyword 'and', not '&&'."
-    InvalidSyntax(invalid_token: invalid_token.OrOr, ..) ->
-      "Lox uses the keyword 'or', not '||'"
-    InvalidSyntax(invalid_token: invalid_token.BitwiseOr, ..) ->
-      "Lox does not support the bitwise or operation."
-    InvalidSyntax(invalid_token: invalid_token.BitwiseAnd, ..) ->
-      "Lox does not support the bitwise and operation."
+    UnsupportedUnaryOperator(..) ->
+      "Lox does not support the unary `+` operation."
+    UnterminatedString(..) -> "This string was never closed."
   }
 }
 
 fn get_span(error: GloxError) -> Span {
   case error {
-    UnexpectedGrapheme(line: line, column: column, ..) ->
-      span.point(line, column)
-    UnterminatedString(line: line, column: column) -> span.point(line, column)
     ExpectExpression(line: line, column: column) -> span.point(line, column)
-    MissingRightParen(line: line, column: column) -> span.point(line, column)
+    InvalidAssignmentTarget(span) -> span
+    InvalidSyntax(span: span, ..) -> span
     MissingColon(line: line, column: column) -> span.point(line, column)
+    MissingRightParen(line: line, column: column) -> span.point(line, column)
     MissingSemicolon(span: span) -> span
     MissingVariableName(span) -> span
     UndefinedVariable(name) -> span.from_token(name)
     UnexpectedEof(line: line, column: column) -> span.point(line, column)
-    UnsupportedUnaryOperator(span: span, ..) -> span
-    UnsupportedOperation(_, operator, ..) -> span.from_token(operator)
+    UnexpectedGrapheme(line: line, column: column, ..) ->
+      span.point(line, column)
     UnsupportedNegation(minus, ..) -> span.from_token(minus)
-    InvalidSyntax(span: span, ..) -> span
+    UnsupportedOperation(_, operator, ..) -> span.from_token(operator)
+    UnsupportedUnaryOperator(span: span, ..) -> span
+    UnterminatedString(line: line, column: column) -> span.point(line, column)
   }
 }
 

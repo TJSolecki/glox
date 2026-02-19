@@ -10,7 +10,7 @@ pub fn evaluate_bool_test() {
   assert interperater.evaluate(
       parser.LiteralBool(True, span.point(0, 0)),
       environment.new(),
-    )
+    ).0
     == Ok(LiteralBool(True))
 }
 
@@ -18,7 +18,7 @@ pub fn evaluate_string_test() {
   assert interperater.evaluate(
       parser.LiteralString("foo", span.point(0, 0)),
       environment.new(),
-    )
+    ).0
     == Ok(LiteralString("foo"))
 }
 
@@ -26,7 +26,7 @@ pub fn evaluate_number_test() {
   assert interperater.evaluate(
       parser.LiteralNumber(67.0, span.point(0, 0)),
       environment.new(),
-    )
+    ).0
     == Ok(LiteralNumber(67.0))
 }
 
@@ -34,7 +34,7 @@ pub fn evaluate_nil_test() {
   assert interperater.evaluate(
       parser.LiteralNil(span.point(0, 0)),
       environment.new(),
-    )
+    ).0
     == Ok(LiteralNil)
 }
 
