@@ -86,16 +86,15 @@ pub type InvalidUnaryToken {
   Plus
 }
 
-type ExpressionParser {
-  ExpressionParser(
-    tokens: List(Token),
-    expression: Result(Expression, ParseError),
-  )
+type Parser(t) {
+  Parser(tokens: List(Token), value: Result(t, ParseError))
 }
 
-type StatementParser {
-  StatementParser(tokens: List(Token), statement: Result(Statement, ParseError))
-}
+type ExpressionParser =
+  Parser(Expression)
+
+type StatementParser =
+  Parser(Statement)
 
 pub fn parse(tokens: List(Token)) -> #(List(Statement), List(ParseError)) {
   tokens
@@ -107,7 +106,7 @@ fn parser_loop(
   tokens: List(Token),
   statements: List(Result(Statement, ParseError)),
 ) -> List(Result(Statement, ParseError)) {
-  let StatementParser(rest_tokens, statement) = declaration(tokens)
+  let Parser(rest_tokens, statement) = declaration(tokens)
   case rest_tokens {
     [token.Token(token_type: token_type, ..), ..] if token_type != token.Eof ->
       parser_loop(rest_tokens, list.prepend(statements, statement))
@@ -121,10 +120,9 @@ fn declaration(tokens: List(Token)) -> StatementParser {
       var_declaration(rest, var)
     _ -> statement(tokens)
   }
-  case parser.statement {
+  case parser.value {
     Ok(..) -> parser
-    Error(parse_error) ->
-      StatementParser(synchronize(parser.tokens), Error(parse_error))
+    Error(parse_error) -> Parser(synchronize(parser.tokens), Error(parse_error))
   }
 }
 
@@ -152,7 +150,7 @@ fn var_declaration_without_init(
       name.column + { name.token_type |> token.lexeme |> string.length },
     )),
   )
-  StatementParser(rest, Ok(VariableDeclaration(name, None)))
+  Parser(rest, Ok(VariableDeclaration(name, None)))
 }
 
 fn var_declaration_with_init(name, tokens: List(Token)) -> StatementParser {
@@ -168,34 +166,10 @@ fn var_declaration_with_init(name, tokens: List(Token)) -> StatementParser {
       expression_span.end_column,
     )),
   )
-  StatementParser(
+  Parser(
     tokens_after_semicolon,
     Ok(VariableDeclaration(name, Some(expression))),
   )
-}
-
-fn expect_identifier(
-  with tokens: List(Token),
-  or_else parse_error: ParseError,
-  on_ok handle_ok: fn(Token, List(Token)) -> StatementParser,
-) -> StatementParser {
-  case tokens {
-    [token.Token(token_type: token.Identifier(..), ..) as identifier, ..rest] ->
-      handle_ok(identifier, rest)
-    _ -> StatementParser(tokens, Error(parse_error))
-  }
-}
-
-fn try_consume(
-  with tokens: List(Token),
-  expect token_type: TokenType,
-  or_else parse_error: ParseError,
-  on_ok handle_ok: fn(List(Token)) -> StatementParser,
-) -> StatementParser {
-  case tokens {
-    [token, ..rest] if token.token_type == token_type -> handle_ok(rest)
-    _ -> StatementParser(tokens, Error(parse_error))
-  }
 }
 
 fn try_unwrap_expression_parser(
@@ -203,9 +177,32 @@ fn try_unwrap_expression_parser(
   handle_ok: fn(List(Token), Expression) -> StatementParser,
 ) -> StatementParser {
   case parser {
-    ExpressionParser(tokens, Ok(expression)) -> handle_ok(tokens, expression)
-    ExpressionParser(tokens, Error(parse_error)) ->
-      StatementParser(tokens, Error(parse_error))
+    Parser(tokens, Ok(expression)) -> handle_ok(tokens, expression)
+    Parser(tokens, Error(parse_error)) -> Parser(tokens, Error(parse_error))
+  }
+}
+
+fn expect_identifier(
+  with tokens: List(Token),
+  or_else parse_error: ParseError,
+  on_ok handle_ok: fn(Token, List(Token)) -> Parser(t),
+) -> Parser(t) {
+  case tokens {
+    [token.Token(token_type: token.Identifier(..), ..) as identifier, ..rest] ->
+      handle_ok(identifier, rest)
+    _ -> Parser(tokens, Error(parse_error))
+  }
+}
+
+fn try_consume(
+  with tokens: List(Token),
+  expect token_type: TokenType,
+  or_else parse_error: ParseError,
+  on_ok handle_ok: fn(List(Token)) -> Parser(t),
+) -> Parser(t) {
+  case tokens {
+    [token, ..rest] if token.token_type == token_type -> handle_ok(rest)
+    _ -> Parser(tokens, Error(parse_error))
   }
 }
 
@@ -255,14 +252,11 @@ fn block_loop(
 ) -> StatementParser {
   case tokens {
     [token.Token(token_type: token.RightBrace, ..), ..rest] ->
-      StatementParser(rest, Ok(Block(statements)))
+      Parser(rest, Ok(Block(statements)))
     [token.Token(token_type: token.Eof, ..)] ->
-      StatementParser(
-        tokens,
-        Error(MissingRightBrace(span.from_token(left_brace))),
-      )
+      Parser(tokens, Error(MissingRightBrace(span.from_token(left_brace))))
     tokens -> {
-      use rest, statement <- try_unwrap_statement_parser(declaration(tokens))
+      use rest, statement <- try_unwrap_parser(declaration(tokens))
       block_loop(left_brace, rest, statements |> list.append([statement]))
     }
   }
@@ -280,10 +274,10 @@ fn statement_helper(
   // TODO: replace with some sport of consume method specific to StatementParser
   case rest {
     [token.Token(token_type: token.Semicolon, ..), ..rest] ->
-      StatementParser(rest, Ok(to_statement(expression)))
+      Parser(rest, Ok(to_statement(expression)))
     _ -> {
       let expression_span = get_span(expression)
-      StatementParser(
+      Parser(
         rest,
         Error(
           MissingSemicolon(span.point(
@@ -300,9 +294,9 @@ fn unwrap_expression_to_statement(
   parser: ExpressionParser,
   handle_ok: fn(#(List(Token), Expression)) -> StatementParser,
 ) -> StatementParser {
-  case parser.expression {
+  case parser.value {
     Ok(expression) -> handle_ok(#(parser.tokens, expression))
-    Error(parser_error) -> StatementParser(parser.tokens, Error(parser_error))
+    Error(parser_error) -> Parser(parser.tokens, Error(parser_error))
   }
 }
 
@@ -322,7 +316,7 @@ fn assignment(tokens: List(Token)) -> ExpressionParser {
       use tokens_after_assignment, value <- try_unwrap_parser(assignment(
         tokens_after_equals,
       ))
-      ExpressionParser(
+      Parser(
         tokens_after_assignment,
         Ok(Assign(name, value, span.add(variable_span, get_span(value)))),
       )
@@ -330,11 +324,11 @@ fn assignment(tokens: List(Token)) -> ExpressionParser {
     [equals, ..tokens_after_equals], not_variable
       if equals.token_type == token.Equal
     ->
-      ExpressionParser(
+      Parser(
         tokens_after_equals,
         Error(InvalidAssignmentTarget(get_span(not_variable))),
       )
-    _, _ -> ExpressionParser(tokens_after_identifier, Ok(expression))
+    _, _ -> Parser(tokens_after_identifier, Ok(expression))
   }
 }
 
@@ -348,19 +342,16 @@ fn comma(tokens: List(Token)) -> ExpressionParser {
 ///         | ( equality '?' ternary ':' ternary ) ;
 fn ternary(tokens: List(Token)) -> ExpressionParser {
   use rest, equality_expression <- try_unwrap_parser(equality(tokens))
-  let equality = ExpressionParser(rest, Ok(equality_expression))
+  let equality = Parser(rest, Ok(equality_expression))
   use #(token, rest) <- try_advance(equality)
   case token.token_type {
     token.QuestionMark -> {
       use rest, true_clause <- try_unwrap_parser(
         ternary(rest)
-        |> consume_expression(
-          token.Colon,
-          MissingColon(token.line, token.column),
-        ),
+        |> consume(token.Colon, MissingColon(token.line, token.column)),
       )
       use rest, false_clause <- try_unwrap_parser(ternary(rest))
-      ExpressionParser(
+      Parser(
         rest,
         Ok(Ternary(
           equality_expression,
@@ -413,7 +404,7 @@ fn unary(tokens: List(Token)) -> ExpressionParser {
       || unary_operator.token_type == token.Minus
     -> {
       use rest, expression <- try_unwrap_parser(unary(rest))
-      ExpressionParser(
+      Parser(
         rest,
         Ok(Unary(
           unary_operator,
@@ -425,7 +416,7 @@ fn unary(tokens: List(Token)) -> ExpressionParser {
     [invalid_unary_operator, ..rest]
       if invalid_unary_operator.token_type == token.Plus
     -> {
-      ExpressionParser(
+      Parser(
         rest,
         Error(UnsupportedUnaryOperator(
           Plus,
@@ -444,32 +435,28 @@ fn primary(tokens: List(Token)) -> ExpressionParser {
     [token, ..rest] ->
       case token.token_type {
         token.False ->
-          ExpressionParser(rest, Ok(LiteralBool(False, span.from_token(token))))
+          Parser(rest, Ok(LiteralBool(False, span.from_token(token))))
         token.True ->
-          ExpressionParser(rest, Ok(LiteralBool(True, span.from_token(token))))
-        token.Nil ->
-          ExpressionParser(rest, Ok(LiteralNil(span.from_token(token))))
+          Parser(rest, Ok(LiteralBool(True, span.from_token(token))))
+        token.Nil -> Parser(rest, Ok(LiteralNil(span.from_token(token))))
         token.String(value) ->
-          ExpressionParser(
-            rest,
-            Ok(LiteralString(value, span.from_token(token))),
-          )
+          Parser(rest, Ok(LiteralString(value, span.from_token(token))))
         token.Number(value) ->
-          ExpressionParser(
+          Parser(
             rest,
             Ok(LiteralNumber(parse_lox_number(value), span.from_token(token))),
           )
         token.LeftParen -> {
           let parser =
             expression(rest)
-            |> consume_expression(
+            |> consume(
               token.RightParen,
               MissingRightParen(token.line, token.column),
             )
           let right_paren =
             list.first(rest) |> result.lazy_unwrap(fn() { panic })
           use rest, expression <- try_unwrap_parser(parser)
-          ExpressionParser(
+          Parser(
             rest,
             Ok(Grouping(
               expression,
@@ -481,27 +468,23 @@ fn primary(tokens: List(Token)) -> ExpressionParser {
           )
         }
         token.Identifier(..) ->
-          ExpressionParser(rest, Ok(Variable(token, span.from_token(token))))
-        _ ->
-          ExpressionParser(
-            rest,
-            Error(ExpectExpression(token.line, token.column)),
-          )
+          Parser(rest, Ok(Variable(token, span.from_token(token))))
+        _ -> Parser(rest, Error(ExpectExpression(token.line, token.column)))
       }
-    [] -> ExpressionParser([], Error(UnexpectedEof))
+    [] -> Parser([], Error(UnexpectedEof))
   }
 }
 
-fn consume_expression(
-  parser: ExpressionParser,
+fn consume(
+  parser: Parser(t),
   token_type: TokenType,
   parse_error: ParseError,
-) -> ExpressionParser {
+) -> Parser(t) {
   case parser.tokens {
     [token, ..rest] if token.token_type == token_type ->
-      ExpressionParser(rest, parser.expression)
-    [_, ..rest] -> ExpressionParser(rest, Error(parse_error))
-    [] -> ExpressionParser([], Error(parse_error))
+      Parser(rest, parser.value)
+    [_, ..rest] -> Parser(rest, Error(parse_error))
+    [] -> Parser([], Error(parse_error))
   }
 }
 
@@ -515,8 +498,8 @@ fn match_zero_or_more(
   case list.contains(token_types, token.token_type) {
     False -> start
     True -> {
-      let ExpressionParser(rest, right_expression) = parse_rule(rest)
-      ExpressionParser(
+      let Parser(rest, right_expression) = parse_rule(rest)
+      Parser(
         rest,
         result.map(right_expression, fn(expression) {
           Binary(
@@ -548,29 +531,19 @@ fn get_span(expression: Expression) -> Span {
 }
 
 fn try_unwrap_parser(
-  parser: ExpressionParser,
-  handle_ok: fn(List(Token), Expression) -> ExpressionParser,
-) -> ExpressionParser {
+  parser: Parser(t),
+  handle_ok: fn(List(Token), t) -> Parser(t),
+) -> Parser(t) {
   case parser {
-    ExpressionParser(expression: Error(_), ..) -> parser
-    ExpressionParser(tokens, Ok(expression)) -> handle_ok(tokens, expression)
-  }
-}
-
-fn try_unwrap_statement_parser(
-  parser: StatementParser,
-  handle_ok: fn(List(Token), Statement) -> StatementParser,
-) -> StatementParser {
-  case parser {
-    StatementParser(tokens, Ok(statement)) -> handle_ok(tokens, statement)
-    StatementParser(statement: Error(_), ..) -> parser
+    Parser(value: Error(_), ..) -> parser
+    Parser(tokens, Ok(inner)) -> handle_ok(tokens, inner)
   }
 }
 
 fn try_advance(
-  parser: ExpressionParser,
-  next: fn(#(Token, List(Token))) -> ExpressionParser,
-) -> ExpressionParser {
+  parser: Parser(t),
+  next: fn(#(Token, List(Token))) -> Parser(t),
+) -> Parser(t) {
   case parser.tokens {
     [] -> parser
     [token, ..rest] -> next(#(token, rest))
