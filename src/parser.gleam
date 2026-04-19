@@ -15,8 +15,11 @@ import token.{type Token, type TokenType}
 /// declaration    → varDeclaration
 ///                | statement ;
 /// statement      → exprStmt
+///                | ifStmt
 ///                | printStmt
 ///                | block ;
+/// ifStmt         → "if" "(" expression ")" statement
+///                ( "else" statement )? ;
 ///
 /// block          → "{" varDeclaration* "}" ;
 /// exprStatement  → expression ";" ;
@@ -43,6 +46,11 @@ pub type Program =
 pub type Statement {
   Block(statements: List(Statement))
   ExpressionStatement(expression: Expression)
+  IfStatement(
+    condition: Expression,
+    then_branch: Statement,
+    else_branch: Option(Statement),
+  )
   PrintStatement(expression: Expression)
   VariableDeclaration(name: Token, expression: Option(Expression))
 }
@@ -73,6 +81,7 @@ pub type Expression {
 pub type ParseError {
   MissingRightBrace(span: Span)
   MissingRightParen(line: Int, column: Int)
+  MissingLeftParen(span: Span)
   ExpectExpression(line: Int, column: Int)
   MissingColon(line: Int, column: Int)
   MissingSemicolon(span: Span)
@@ -226,14 +235,44 @@ fn synchronize(tokens: List(Token)) -> List(Token) {
 }
 
 /// statement → exprStmt
+///           | ifStmt
 ///           | printStmt
 ///           | block ;
 fn statement(tokens: List(Token)) -> StatementParser {
   case tokens {
+    [token.Token(token_type: token.If, ..) as if_token, ..rest] ->
+      if_statement(rest, if_token)
     [token.Token(token_type: token.Print, ..), ..rest] -> print_statement(rest)
     [left_brace, ..rest] if left_brace.token_type == token.LeftBrace ->
       block(left_brace, rest)
     _ -> expression_statement(tokens)
+  }
+}
+
+fn if_statement(tokens: List(Token), if_token: Token) -> StatementParser {
+  use rest <- try_consume(
+    with: tokens,
+    expect: token.LeftParen,
+    or_else: MissingLeftParen(span.from_token(if_token)),
+  )
+  // This is garenteed to be present since try_consume passed in this branch
+  let left_paren = list.first(tokens) |> result.lazy_unwrap(fn() { panic })
+  use #(rest, condition) <- unwrap_expression_to_statement(expression(rest))
+  use rest <- try_consume(
+    with: rest,
+    expect: token.RightParen,
+    or_else: MissingRightParen(left_paren.line, left_paren.column),
+  )
+  use rest, then_statement <- try_unwrap_parser(statement(rest))
+  case rest {
+    [token.Token(token_type: token.Else, ..), ..rest] -> {
+      use rest, else_statement <- try_unwrap_parser(statement(rest))
+      Parser(
+        rest,
+        Ok(IfStatement(condition, then_statement, Some(else_statement))),
+      )
+    }
+    _ -> Parser(rest, Ok(IfStatement(condition, then_statement, None)))
   }
 }
 

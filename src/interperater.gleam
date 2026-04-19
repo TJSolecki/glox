@@ -74,6 +74,21 @@ fn interperate_statement(
   env: Environment,
 ) -> InterperateResult {
   case statement {
+    parser.IfStatement(condition, then_statement, else_statement) -> {
+      case evaluate(condition, env) {
+        #(Ok(literal), env) -> {
+          case is_truthy(literal) {
+            True -> interperate_statement(then_statement, env)
+            False ->
+              else_statement
+              |> option.map(interperate_statement(_, env))
+              |> option.unwrap(InterperateResult([], None, env))
+          }
+        }
+        #(Error(runtime_error), env) ->
+          InterperateResult([], Some(runtime_error), env)
+      }
+    }
     parser.PrintStatement(expression) -> {
       case evaluate(expression, env) {
         #(Ok(literal), env) ->
