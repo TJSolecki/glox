@@ -17,7 +17,9 @@ import token.{type Token, type TokenType}
 /// statement      → exprStmt
 ///                | ifStmt
 ///                | printStmt
+///                | whileStmt
 ///                | block ;
+/// whileStmt      → "while" "(" expression ")" statement ;
 /// ifStmt         → "if" "(" expression ")" statement
 ///                ( "else" statement )? ;
 ///
@@ -28,7 +30,9 @@ import token.{type Token, type TokenType}
 ///
 /// expression     → comma ;
 /// assignment     → IDENTIFIER "=" assignment
-///                | comma;
+///                | logic_or;
+/// logic_or       → logic_and ( "or" logic_and )* ;
+/// logic_and      → equality ( "and" comma )* ;
 /// comma          → ternary ( "," ternary )*
 /// ternary        → equality
 ///                | ( equality "?" ternary ":" ternary ) ;
@@ -53,6 +57,7 @@ pub type Statement {
   )
   PrintStatement(expression: Expression)
   VariableDeclaration(name: Token, expression: Option(Expression))
+  WhileStatement(condition: Expression, body: Statement)
 }
 
 pub type Expression {
@@ -60,6 +65,12 @@ pub type Expression {
   Grouping(expression: Expression, span: Span)
   Unary(token: Token, expression: Expression, span: Span)
   Binary(
+    left_expression: Expression,
+    operator: Token,
+    right_expression: Expression,
+    span: Span,
+  )
+  Logical(
     left_expression: Expression,
     operator: Token,
     right_expression: Expression,
@@ -81,7 +92,7 @@ pub type Expression {
 pub type ParseError {
   MissingRightBrace(span: Span)
   MissingRightParen(line: Int, column: Int)
-  MissingLeftParen(span: Span)
+  MissingLeftParenAfter(token: Token)
   ExpectExpression(line: Int, column: Int)
   MissingColon(line: Int, column: Int)
   MissingSemicolon(span: Span)
@@ -243,6 +254,8 @@ fn statement(tokens: List(Token)) -> StatementParser {
     [token.Token(token_type: token.If, ..) as if_token, ..rest] ->
       if_statement(rest, if_token)
     [token.Token(token_type: token.Print, ..), ..rest] -> print_statement(rest)
+    [token.Token(token_type: token.While, ..) as while_token, ..rest] ->
+      while_statement(rest, while_token)
     [left_brace, ..rest] if left_brace.token_type == token.LeftBrace ->
       block(left_brace, rest)
     _ -> expression_statement(tokens)
@@ -253,7 +266,7 @@ fn if_statement(tokens: List(Token), if_token: Token) -> StatementParser {
   use rest <- try_consume(
     with: tokens,
     expect: token.LeftParen,
-    or_else: MissingLeftParen(span.from_token(if_token)),
+    or_else: MissingLeftParenAfter(if_token),
   )
   // This is garenteed to be present since try_consume passed in this branch
   let left_paren = list.first(tokens) |> result.lazy_unwrap(fn() { panic })
@@ -278,6 +291,24 @@ fn if_statement(tokens: List(Token), if_token: Token) -> StatementParser {
 
 fn print_statement(tokens: List(Token)) -> StatementParser {
   statement_helper(tokens, PrintStatement)
+}
+
+// whileStmt → "while" "(" expression ")" statement ;
+fn while_statement(tokens: List(Token), while_token: Token) -> StatementParser {
+  use rest <- try_consume(
+    with: tokens,
+    expect: token.LeftParen,
+    or_else: MissingLeftParenAfter(while_token),
+  )
+  let left_paren = list.first(tokens) |> result.lazy_unwrap(fn() { panic })
+  use #(rest, condition) <- unwrap_expression_to_statement(expression(rest))
+  use rest <- try_consume(
+    with: rest,
+    expect: token.RightParen,
+    or_else: MissingRightParen(left_paren.line, left_paren.column),
+  )
+  use rest, statement <- try_unwrap_parser(statement(rest))
+  Parser(rest, Ok(WhileStatement(condition, statement)))
 }
 
 fn block(left_brace: Token, tokens: List(Token)) -> StatementParser {
@@ -347,7 +378,7 @@ fn expression(tokens: List(Token)) -> ExpressionParser {
 /// assignment → IDENTIFIER "=" assignment
 ///            | comma;
 fn assignment(tokens: List(Token)) -> ExpressionParser {
-  use tokens_after_identifier, expression <- try_unwrap_parser(comma(tokens))
+  use tokens_after_identifier, expression <- try_unwrap_parser(or(tokens))
   case tokens_after_identifier, expression {
     [equals, ..tokens_after_equals], Variable(name, variable_span)
       if equals.token_type == token.Equal
@@ -368,6 +399,39 @@ fn assignment(tokens: List(Token)) -> ExpressionParser {
         Error(InvalidAssignmentTarget(get_span(not_variable))),
       )
     _, _ -> Parser(tokens_after_identifier, Ok(expression))
+  }
+}
+
+/// logic_or → logic_and ( "or" logic_and )* ;
+fn or(tokens: List(Token)) -> ExpressionParser {
+  logical(from: tokens, match: token.Or, using: and)
+}
+
+/// logic_and → comma ( "and" comma )* ;
+fn and(tokens: List(Token)) -> ExpressionParser {
+  logical(from: tokens, match: token.And, using: comma)
+}
+
+fn logical(
+  from tokens: List(Token),
+  match logical_token_type: TokenType,
+  using rule: fn(List(Token)) -> ExpressionParser,
+) {
+  use rest, left <- try_unwrap_parser(rule(tokens))
+  case rest {
+    [logical_token, ..rest] if logical_token.token_type == logical_token_type -> {
+      use rest, right <- try_unwrap_parser(rule(rest))
+      Parser(
+        rest,
+        Ok(Logical(
+          left,
+          logical_token,
+          right,
+          span.add(get_span(left), get_span(right)),
+        )),
+      )
+    }
+    _ -> Parser(rest, Ok(left))
   }
 }
 
@@ -557,6 +621,7 @@ fn match_zero_or_more(
 fn get_span(expression: Expression) -> Span {
   case expression {
     Assign(span: span, ..) -> span
+    Logical(span: span, ..) -> span
     Grouping(span: span, ..) -> span
     Ternary(span: span, ..) -> span
     Binary(span: span, ..) -> span
@@ -604,6 +669,12 @@ pub fn pretty_print(expression: Expression) -> String {
       <> token.lexeme(name.token_type)
       <> " = "
       <> pretty_print(value)
+      <> " )"
+    Logical(left, operator, right, ..) ->
+      "( "
+      <> pretty_print(left)
+      <> token.lexeme(operator.token_type)
+      <> pretty_print(right)
       <> " )"
     Grouping(group_expression, ..) ->
       "(group " <> pretty_print(group_expression) <> ")"

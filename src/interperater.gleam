@@ -1,4 +1,5 @@
 import environment.{type Environment}
+import gleam/bool
 import gleam/float
 import gleam/int
 import gleam/list
@@ -55,13 +56,13 @@ pub fn interperate_loop(
   case statements {
     [statement, ..rest] -> {
       case interperate_statement(statement, env) {
-        InterperateResult(new_logs, None, env) ->
-          interperate_loop(rest, list.append(logs, new_logs), env)
-        InterperateResult(new_logs, Some(runtime_error), env) ->
+        InterperateResult(new_logs, None, new_env) ->
+          interperate_loop(rest, list.append(logs, new_logs), new_env)
+        InterperateResult(new_logs, Some(runtime_error), new_env) ->
           InterperateResult(
             list.append(logs, new_logs),
             Some(runtime_error),
-            env,
+            new_env,
           )
       }
     }
@@ -97,6 +98,23 @@ fn interperate_statement(
           InterperateResult([], Some(runtime_error), env)
       }
     }
+    parser.WhileStatement(condition, body) -> {
+      case evaluate(condition, env) {
+        #(Ok(literal), env_after_condition) ->
+          case is_truthy(literal) {
+            True -> {
+              use logs, env_after_body <- try_unwrap_interperate_result(
+                interperate_statement(body, env_after_condition),
+              )
+              interperate_statement(statement, env_after_body)
+              |> prepend_logs(logs)
+            }
+            False -> InterperateResult([], None, env)
+          }
+        #(Error(runtime_error), env) ->
+          InterperateResult([], Some(runtime_error), env)
+      }
+    }
     parser.ExpressionStatement(expression) -> {
       case evaluate(expression, env) {
         #(Ok(..), env) -> InterperateResult([], None, env)
@@ -115,11 +133,32 @@ fn interperate_statement(
       }
     }
     parser.Block(statements) -> {
-      let InterperateResult(logs, runtime_error, ..) =
-        interperate_loop(statements, [], environment.create_shadow_env(env))
-      InterperateResult(logs, runtime_error, env)
+      let assert InterperateResult(
+        logs,
+        runtime_error,
+        environment.Environment(Some(new_env), ..),
+      ) = interperate_loop(statements, [], environment.create_shadow_env(env))
+      InterperateResult(logs, runtime_error, new_env)
     }
   }
+}
+
+fn try_unwrap_interperate_result(
+  result: InterperateResult,
+  on_ok: fn(List(String), Environment) -> InterperateResult,
+) -> InterperateResult {
+  case result {
+    InterperateResult(runtime_error: Some(..), ..) -> result
+    InterperateResult(logs, None, env) -> on_ok(logs, env)
+  }
+}
+
+fn prepend_logs(
+  result: InterperateResult,
+  logs_to_add: List(String),
+) -> InterperateResult {
+  let InterperateResult(logs, runtime_error, env) = result
+  InterperateResult(list.append(logs_to_add, logs), runtime_error, env)
 }
 
 pub fn evaluate(expression: Expression, env: Environment) -> EvalResult {
@@ -132,12 +171,14 @@ pub fn evaluate(expression: Expression, env: Environment) -> EvalResult {
     parser.Unary(operator, right, ..) -> evaluate_unary(operator, right, env)
     parser.Binary(left, operator, right, ..) ->
       evaluate_binary(left, operator, right, env)
+    parser.Logical(left, operator, right, ..) ->
+      evaluate_logical(left, operator, right, env)
     parser.Ternary(cond, left, right, ..) ->
       evaluate_ternary(cond, left, right, env)
     parser.Variable(name, ..) -> #(environment.get(env, name), env)
     parser.Assign(name, expression, ..) -> {
       case evaluate(expression, env) {
-        #(Ok(literal), env) -> environment.assign(env, name, literal)
+        #(Ok(literal), new_env) -> environment.assign(new_env, name, literal)
         error -> error
       }
     }
@@ -283,6 +324,19 @@ fn is_equal(left_literal: Literal, right_literal: Literal) -> Bool {
       left_value == right_value
     _, _ -> False
   }
+}
+
+fn evaluate_logical(
+  left: Expression,
+  operator: Token,
+  right: Expression,
+  env: Environment,
+) -> EvalResult {
+  use left_literal, env <- try_unwrap_eval_result(evaluate(left, env))
+  let or = operator.token_type == token.Or
+  let truthy = is_truthy(left_literal)
+  use <- bool.guard(or && truthy || !or && !truthy, #(Ok(left_literal), env))
+  evaluate(right, env)
 }
 
 fn evaluate_ternary(

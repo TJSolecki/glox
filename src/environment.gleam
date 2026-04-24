@@ -41,7 +41,10 @@ pub fn assign(
   let env_has_key = dict.has_key(env.values, name.token_type |> token.lexeme)
   case env_has_key, env.enclosing {
     True, _ -> #(Ok(value), declare(env, name, value))
-    False, Some(enclosing) -> assign(enclosing, name, value)
+    False, Some(enclosing) -> {
+      let #(result, new_enclosing) = assign(enclosing, name, value)
+      #(result, Environment(Some(new_enclosing), env.values))
+    }
     False, None -> #(Error(UndefinedVariable(name)), env)
   }
 }

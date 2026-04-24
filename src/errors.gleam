@@ -16,7 +16,7 @@ pub type GloxError {
   MissingColon(line: Int, column: Int)
   MissingRightBrace(span: Span)
   MissingRightParen(line: Int, column: Int)
-  MissingLeftParen(span: Span)
+  MissingLeftParenAfter(token: Token)
   MissingSemicolon(span: Span)
   MissingVariableName(span: Span)
   UndefinedVariable(name: Token)
@@ -42,7 +42,7 @@ pub fn from_parse_error(parse_error: ParseError, source: String) -> GloxError {
   case parse_error {
     parser.MissingRightBrace(span) -> MissingRightBrace(span)
     parser.MissingRightParen(line, column) -> MissingRightParen(line, column)
-    parser.MissingLeftParen(span) -> MissingLeftParen(span)
+    parser.MissingLeftParenAfter(token) -> MissingLeftParenAfter(token)
     parser.ExpectExpression(line, column) -> ExpectExpression(line, column)
     parser.MissingColon(line, column) -> MissingColon(line, column)
     parser.MissingSemicolon(span) ->
@@ -112,7 +112,7 @@ fn error_title(scan_error: GloxError) -> String {
     MissingColon(..) -> "Expected ':' before ';'"
     MissingRightBrace(..) -> "Missing '}'"
     MissingRightParen(..) -> "Missing ')'"
-    MissingLeftParen(..) -> "Missing '('"
+    MissingLeftParenAfter(..) -> "Missing '('"
     MissingSemicolon(..) -> "Missing ';'"
     MissingVariableName(..) -> "Missing variable name"
     UndefinedVariable(..) -> "Undefined variable"
@@ -158,8 +158,10 @@ fn error_description(error: GloxError) -> String {
     MissingColon(..) -> "This ternary has no ':'."
     MissingRightBrace(..) -> "This block was never closed."
     MissingRightParen(..) -> "This parentheses was never closed."
-    MissingLeftParen(..) ->
-      "We expected to see a `(` after this `if` statement."
+    MissingLeftParenAfter(token) ->
+      "We expected to see a `(` after this `"
+      <> token.lexeme(token.token_type)
+      <> "` statement."
     MissingSemicolon(..) -> "We were expecting an ';' here."
     MissingVariableName(..) ->
       "We expect a variable name to be defined after `var`."
@@ -194,7 +196,7 @@ fn get_span(error: GloxError) -> Span {
     MissingColon(line: line, column: column) -> span.point(line, column)
     MissingRightBrace(span) -> span
     MissingRightParen(line: line, column: column) -> span.point(line, column)
-    MissingLeftParen(span) -> span
+    MissingLeftParenAfter(token) -> span.from_token(token)
     MissingSemicolon(span: span) -> span
     MissingVariableName(span) -> span
     UndefinedVariable(name) -> span.from_token(name)
