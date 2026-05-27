@@ -3,9 +3,32 @@ import parser.{
   Block, ExpressionStatement, LiteralNumber, PrintStatement, Variable,
   VariableDeclaration,
 }
+import pretty_printer
 import scanner
 import span.{Span}
+import test_utils
 import token.{Identifier, Token}
+
+pub fn can_roundtrip_ast_with_pretty_printer_test() {
+  let test_cases = [
+    #("var a = 1;\n", "variable declaration"),
+    #("var b;\n", "uninitialized variable declaration"),
+    #(
+      "var a = 0;
+while (a < 10) {
+    a = a + 1;
+    print a;
+}\n
+print a;\n",
+      "while loop with 2 statements within a block surrounded by statements",
+    ),
+  ]
+  use #(source, message) <- test_utils.data_provider(test_cases)
+  let tokens = scanner.scan(source).0
+  let assert #(statements, []) = parser.parse(tokens)
+  assert pretty_printer.pretty_print(statements) == source
+    as { "Should roundtrip " <> message }
+}
 
 pub fn parse_unexpected_expression_error_test() {
   let source = "1+;"
