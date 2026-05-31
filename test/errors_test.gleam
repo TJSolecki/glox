@@ -1,12 +1,14 @@
 import birdie
-import errors
+import errors.{type GloxError}
 import gleam/string
-import parser
+import scanner
 
-pub fn from_unexpected_eof_test() {
-  let actual_glox_error =
-    errors.from_parse_error(parser.UnexpectedEof, string.repeat("\n", times: 2))
-  assert actual_glox_error == errors.UnexpectedEof(3, 1)
+pub fn format_unexpected_eof_error_test() {
+  errors.error_message(
+    errors.UnexpectedEof(3, 1),
+    string.repeat("\n", times: 2),
+  )
+  |> birdie.snap(title: "Unexpected Eof points to the end of the file")
 }
 
 pub fn format_error_message_points_to_correct_unexpected_grapheme_test() {
@@ -34,4 +36,49 @@ pub fn format_error_message_should_handle_first_char_unterminated_string_test() 
   |> birdie.snap(
     title: "Error message format should handle the first character being an unterminated string",
   )
+}
+
+pub fn format_error_message_should_handle_invalid_syntax_error_for_wrong_or_test() {
+  let source = "true || false;"
+  source
+  |> scan_source_for_single_error
+  |> errors.error_message(source)
+  |> birdie.snap(
+    title: "Illegal syntax error message for wrong logical or should point to `||`",
+  )
+}
+
+pub fn format_error_message_should_handle_invalid_syntax_error_for_wrong_and_test() {
+  let source = "true && true;"
+  source
+  |> scan_source_for_single_error
+  |> errors.error_message(source)
+  |> birdie.snap(
+    title: "Illegal syntax error message for wrong logical and should point to `&&`",
+  )
+}
+
+pub fn format_error_message_should_handle_invalid_syntax_error_for_bitwise_or_test() {
+  let source = "1 | 0;"
+  source
+  |> scan_source_for_single_error
+  |> errors.error_message(source)
+  |> birdie.snap(
+    title: "Illegal syntax error message for bitwise or and should point to `|`",
+  )
+}
+
+pub fn format_error_message_should_handle_invalid_syntax_error_for_bitwise_and_test() {
+  let source = "1 & 1;"
+  source
+  |> scan_source_for_single_error
+  |> errors.error_message(source)
+  |> birdie.snap(
+    title: "Illegal syntax error message for bitwise and and should point to `&`",
+  )
+}
+
+fn scan_source_for_single_error(source: String) -> GloxError {
+  let assert #(_, [error]) = scanner.scan(source)
+  error |> errors.from_scan_error
 }
