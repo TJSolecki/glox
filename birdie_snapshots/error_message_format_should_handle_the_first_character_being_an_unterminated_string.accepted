@@ -1,0 +1,13 @@
+---
+version: 1.5.5
+title: Error message format should handle the first character being an unterminated string
+file: ./test/errors_test.gleam
+test_name: format_error_message_should_handle_first_char_unterminated_string_test
+---
+error: Unterminated string
+┌─ 1:1
+|
+1 | "
+|   ^
+
+This string was never closed.

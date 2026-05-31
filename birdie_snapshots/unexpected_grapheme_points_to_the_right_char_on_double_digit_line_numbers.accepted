@@ -1,0 +1,13 @@
+---
+version: 1.5.5
+title: Unexpected grapheme points to the right char on double digit line numbers
+file: ./test/errors_test.gleam
+test_name: format_error_message_points_to_correct_unexpected_grapheme_test
+---
+error: Unexpected character
+┌─ 10:5
+|
+10 | let @ foo = "bar"
+|        ^
+
+We weren't expecting a "@" here.

@@ -1,0 +1,13 @@
+---
+version: 1.5.5
+title: UnterminatedString error message points to correct opening quote character
+file: ./test/errors_test.gleam
+test_name: format_error_message_points_to_correct_open_string_test
+---
+error: Unterminated string
+┌─ 1:11
+|
+1 | let foo = "bar baz
+|             ^
+
+This string was never closed.
