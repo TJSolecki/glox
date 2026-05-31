@@ -1,11 +1,13 @@
 import gleam/float
 import gleam/int
 import gleam/list
-import gleam/option.{None, Some}
+import gleam/option
 import gleam/string
 import parser.{
   type Expression, type Statement, Assign, Binary, Block, ExpressionStatement,
-  LiteralNumber, PrintStatement, Variable, VariableDeclaration, WhileStatement,
+  Grouping, IfStatement, LiteralBool, LiteralNil, LiteralNumber, LiteralString,
+  Logical, PrintStatement, Ternary, Unary, Variable, VariableDeclaration,
+  WhileStatement,
 }
 import token
 
@@ -38,14 +40,15 @@ fn append(new: String, printer: Printer) -> Printer {
 
 fn pretty_print_statement(statement: Statement, printer: Printer) -> Printer {
   case statement {
-    VariableDeclaration(name, Some(expression)) ->
+    VariableDeclaration(name, initializer) ->
       "var "
       <> token.lexeme(name.token_type)
-      <> " = "
-      <> pretty_print_expression(expression)
+      <> initializer
+      |> option.map(fn(expression) {
+        " = " <> pretty_print_expression(expression)
+      })
+      |> option.unwrap("")
       <> ";"
-    VariableDeclaration(name, None) ->
-      "var " <> token.lexeme(name.token_type) <> ";"
     WhileStatement(condition, inner_statement) ->
       "while ("
       <> pretty_print_expression(condition)
@@ -58,39 +61,72 @@ fn pretty_print_statement(statement: Statement, printer: Printer) -> Printer {
       "print " <> pretty_print_expression(expression) <> ";"
     ExpressionStatement(expression) ->
       pretty_print_expression(expression) <> ";"
+    IfStatement(condition, then_branch, else_branch) ->
+      "if ("
+      <> pretty_print_expression(condition)
+      <> ") "
+      <> pretty_print_statement(then_branch, Printer("", printer.block_level)).source
+      |> string.drop_end(up_to: 1)
+      <> option.map(else_branch, fn(else_branch) {
+        " else "
+        <> pretty_print_statement(else_branch, Printer("", printer.block_level)).source
+      })
+      |> option.unwrap("")
+    Block([]) -> "{}"
     Block(statements) -> {
       let printer_after_block =
         statements
         |> list.fold(
-          Printer(printer.source <> "{\n", printer.block_level + 1),
+          Printer("{\n", printer.block_level + 1),
           fn(printer, statement) { pretty_print_statement(statement, printer) },
         )
       printer_after_block.source
       <> string.repeat(" ", times: printer.block_level * 4)
       <> "}"
     }
-    _ -> todo as "print statement"
   }
   |> append(printer)
 }
 
 fn pretty_print_expression(expression: Expression) -> String {
   case expression {
+    Unary(operator, operand, ..) ->
+      token.lexeme(operator.token_type) <> pretty_print_expression(operand)
     Binary(left, operator, right, ..) ->
       pretty_print_expression(left)
       <> " "
       <> token.lexeme(operator.token_type)
       <> " "
       <> pretty_print_expression(right)
+    Ternary(condition, if_branch, else_branch, ..) ->
+      pretty_print_expression(condition)
+      <> " ? "
+      <> pretty_print_expression(if_branch)
+      <> " : "
+      <> pretty_print_expression(else_branch)
     Assign(name, value, ..) ->
       token.lexeme(name.token_type) <> " = " <> pretty_print_expression(value)
+    Logical(left, operator, right, ..) ->
+      pretty_print_expression(left)
+      <> " "
+      <> token.lexeme(operator.token_type)
+      <> " "
+      <> pretty_print_expression(right)
     LiteralNumber(value, ..) -> {
       case value == float.floor(value) {
         True -> float.truncate(value) |> int.to_string
         False -> float.to_string(value)
       }
     }
+    LiteralBool(value, ..) ->
+      case value {
+        True -> "true"
+        False -> "false"
+      }
+    LiteralNil(..) -> "nil"
+    LiteralString(value, ..) -> "\"" <> value <> "\""
     Variable(name, ..) -> token.lexeme(name.token_type)
-    _ -> todo as "print expr"
+    Grouping(inner_expression, ..) ->
+      "(" <> pretty_print_expression(inner_expression) <> ")"
   }
 }

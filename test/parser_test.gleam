@@ -1,27 +1,59 @@
-import gleam/option.{Some}
-import parser.{
-  Block, ExpressionStatement, LiteralNumber, PrintStatement, Variable,
-  VariableDeclaration,
-}
+import parser
 import pretty_printer
 import scanner
-import span.{Span}
+import span
 import test_utils
-import token.{Identifier, Token}
 
 pub fn can_roundtrip_ast_with_pretty_printer_test() {
   let test_cases = [
+    #("nil;\n", "literal nil"),
+    #("true;\n", "literal true"),
+    #("false;\n", "literal false"),
+    #("\"foo\";\n", "literal string"),
+    #("1;\n", "literal whole number"),
+    #("1.01;\n", "literal decimal number"),
+    #("bar;\n", "variable"),
+    #("condition ? true : false;\n", "ternary"),
+    #("a and b;\n", "logical and"),
+    #("a or b;\n", "logical or"),
+    #("!true;\n", "unary not"),
+    #("1 + 2;\n", "binary addition"),
+    #("1 - 2;\n", "binary subtraction"),
+    #("1 / 2;\n", "binary division"),
+    #("1 * 2;\n", "binary multiplication"),
+    #("(group);\n", "grouping"),
+    #("{\n    block;\n}\n", "block"),
+    #("if (true) {\n    then_branch;\n}\n", "if statement, no else"),
+    #(
+      "if (true) {\n    then_branch;\n} else {\n    else_branch;\n}\n",
+      "if statement, with else",
+    ),
+    #("if (true) true;\n", "if with no block"),
+    #("if (true) true; else false;\n", "if else with no blocks"),
     #("var a = 1;\n", "variable declaration"),
     #("var b;\n", "uninitialized variable declaration"),
+    #("while (true) for_ever;\n", "while loop"),
     #(
       "var a = 0;
 while (a < 10) {
     a = a + 1;
     print a;
-}\n
-print a;\n",
+}
+
+print a;
+",
       "while loop with 2 statements within a block surrounded by statements",
     ),
+    #("{\n    var a = 1;\n}\n", "block with declaration"),
+    #(
+      "var a = 1;\n{\n    a;\n}\n",
+      "variable declaration with identifier usage",
+    ),
+    #(
+      "var a = 1;\n{\n    print a;\n}\n",
+      "variable declaration followed by print in block",
+    ),
+    #("var a = 1;\n{}\n", "variable declaration followed by empty block"),
   ]
   use #(source, message) <- test_utils.data_provider(test_cases)
   let tokens = scanner.scan(source).0
@@ -62,87 +94,4 @@ pub fn parse_missing_colon_expression_error_test() {
 pub fn parse_unexpected_eof_test() {
   let assert #([], [parse_error]) = parser.parse([])
   assert parse_error == parser.UnexpectedEof
-}
-
-pub fn parse_lox_number_can_parse_whole_number_test() {
-  assert parser.parse_lox_number("10") == 10.0
-}
-
-pub fn parse_lox_number_can_parse_decimal_number_test() {
-  assert parser.parse_lox_number("45.6") == 45.6
-}
-
-pub fn can_parse_empty_block_test() {
-  let source = "var a = 1; {}"
-  let tokens = scanner.scan(source).0
-  assert #(
-      [
-        parser.VariableDeclaration(
-          Token(Identifier("a"), 1, 5),
-          Some(LiteralNumber(1.0, Span(1, 9, 1, 9))),
-        ),
-        Block([]),
-      ],
-      [],
-    )
-    == parser.parse(tokens)
-}
-
-pub fn can_parse_block_with_print_test() {
-  let source = "var a = 1; {print a;}"
-  let tokens = scanner.scan(source).0
-  assert #(
-      [
-        VariableDeclaration(
-          Token(Identifier("a"), 1, 5),
-          Some(LiteralNumber(1.0, Span(1, 9, 1, 9))),
-        ),
-        Block([
-          PrintStatement(Variable(
-            Token(Identifier("a"), 1, 19),
-            Span(1, 19, 1, 19),
-          )),
-        ]),
-      ],
-      [],
-    )
-    == parser.parse(tokens)
-}
-
-pub fn can_parse_block_with_expression_statement_test() {
-  let source = "var a = 1; {a;}"
-  let tokens = scanner.scan(source).0
-  assert #(
-      [
-        VariableDeclaration(
-          Token(Identifier("a"), 1, 5),
-          Some(LiteralNumber(1.0, Span(1, 9, 1, 9))),
-        ),
-        Block([
-          ExpressionStatement(Variable(
-            Token(Identifier("a"), 1, 13),
-            Span(1, 13, 1, 13),
-          )),
-        ]),
-      ],
-      [],
-    )
-    == parser.parse(tokens)
-}
-
-pub fn can_parse_block_with_declaration_test() {
-  let source = "{var a = 1;}"
-  let tokens = scanner.scan(source).0
-  assert #(
-      [
-        Block([
-          VariableDeclaration(
-            Token(Identifier("a"), 1, 6),
-            Some(LiteralNumber(1.0, Span(1, 10, 1, 10))),
-          ),
-        ]),
-      ],
-      [],
-    )
-    == parser.parse(tokens)
 }
