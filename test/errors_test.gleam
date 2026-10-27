@@ -1,6 +1,7 @@
 import birdie
 import errors.{type GloxError}
 import gleam/string
+import parser
 import scanner
 
 pub fn format_unexpected_eof_error_test() {
@@ -78,7 +79,29 @@ pub fn format_error_message_should_handle_invalid_syntax_error_for_bitwise_and_t
   )
 }
 
+pub fn format_error_message_should_point_to_unclosed_left_brace_test() {
+  "{}{}{{}"
+  |> parse_source_for_single_error_message
+  |> birdie.snap(
+    title: "MissingRightBrace error message should point to unclosed left brace",
+  )
+}
+
+pub fn format_error_message_should_point_to_unclosed_left_paren_test() {
+  "()()(()"
+  |> parse_source_for_single_error_message
+  |> birdie.snap(
+    title: "MissingRightParen error message should point to unclosed left paren",
+  )
+}
+
 fn scan_source_for_single_error(source: String) -> GloxError {
   let assert #(_, [error]) = scanner.scan(source)
   error |> errors.from_scan_error
+}
+
+fn parse_source_for_single_error_message(source: String) -> String {
+  let assert #(tokens, []) = scanner.scan(source)
+  let assert #(_, [error]) = parser.parse(tokens)
+  error |> errors.from_parse_error(source) |> errors.error_message(source)
 }

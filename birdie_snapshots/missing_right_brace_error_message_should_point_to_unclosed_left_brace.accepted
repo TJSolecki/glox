@@ -1,0 +1,13 @@
+---
+version: 1.5.5
+title: MissingRightBrace error message should point to unclosed left brace
+file: ./test/errors_test.gleam
+test_name: format_error_message_should_point_to_unclosed_left_brace_test
+---
+error: Missing '}'
+┌─ 1:5
+|
+1 | {}{}{{}
+|       ^
+
+This block was never closed.
